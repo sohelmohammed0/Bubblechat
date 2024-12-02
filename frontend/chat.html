@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Bubble Chat</title>
+  <link rel="stylesheet" href="styles.css">
+  <script src="components.js" defer></script>
+  <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script> <!-- Include the Socket.IO library -->
+  <script src="app.js" defer></script> <!-- Link to your chat app JavaScript -->
+</head>
+<body>
+  <button id="logout-btn">Logout</button>
+  <main class="chat-container">
+    <div id="chat-box">
+      <!-- Messages will appear here -->
+    </div>
+    <form id="chat-form">
+      <input type="text" id="message" placeholder="Type a message" required>
+      <button type="submit">Send</button>
+    </form>
+  </main>
+
+  <script>
+    // Check if user data exists in sessionStorage
+    const user = JSON.parse(sessionStorage.getItem('user'));
+
+    // If no user data is found, redirect to login page
+    if (!user) {
+      alert('You must be logged in to access the chat.');
+      window.location.href = 'login.html'; // Redirect to login page
+    }
+
+    // Connect to the WebSocket server using Socket.IO
+    const socket = io('http://localhost:5000'); // Assuming your server is running on port 5000
+
+    // Emit a message to the server when the user submits the form
+    const chatForm = document.getElementById('chat-form');
+    const messageInput = document.getElementById('message');
+    const chatBox = document.getElementById('chat-box');
+
+    chatForm.addEventListener('submit', (e) => {
+      e.preventDefault();
+
+      const message = messageInput.value;
+      console.log('Sending message:', message); // Debugging line
+
+      // Emit the message to the server
+      socket.emit('sendMessage', { user: user.email, message });
+
+      // Clear the input field
+      messageInput.value = '';
+    });
+
+    // Listen for incoming messages from the server
+    socket.on('receiveMessage', (data) => {
+      console.log('Received message from server:', data);  // Debugging line
+
+      const messageElement = document.createElement('div');
+      messageElement.classList.add('message');
+      messageElement.textContent = `${data.user}: ${data.message}`;
+      chatBox.appendChild(messageElement);
+      chatBox.scrollTop = chatBox.scrollHeight; // Scroll to the bottom
+    });
+
+    // Logout logic
+    const logoutButton = document.getElementById('logout-btn');
+    logoutButton.addEventListener('click', () => {
+      // Remove user data from sessionStorage
+      sessionStorage.removeItem('user');
+      // Redirect to the login page after logout
+      window.location.href = 'login.html';
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Signup</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <main class="auth-container">
+    <h1>Signup</h1>
+    <form id="signup-form">
+      <input type="text" id="username" placeholder="Username" required>
+      <input type="email" id="email" placeholder="Email" required>
+      <input type="password" id="password" placeholder="Password" required>
+      <button type="submit">Signup</button>
+    </form>
+    <p id="signup-message"></p>
+  </main>
+  <script>
+    const form = document.getElementById('signup-form');
+    const messageElement = document.getElementById('signup-message');
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+
+      const username = document.getElementById('username').value;
+      const email = document.getElementById('email').value;
+      const password = document.getElementById('password').value;
+
+      try {
+        const response = await fetch('http://localhost:5000/api/signup', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username, email, password }),
+        });
+
+        const data = await response.json();
+
+        if (response.ok) {
+          messageElement.textContent = data.message;
+          messageElement.style.color = 'green';
+        } else {
+          messageElement.textContent = data.error;
+          messageElement.style.color = 'red';
+        }
+      } catch (error) {
+        messageElement.textContent = 'Error signing up. Please try again.';
+        messageElement.style.color = 'red';
+      }
+    });
+  </script>
+</body>
+</html>
