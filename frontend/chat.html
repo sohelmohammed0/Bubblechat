@@ -5,71 +5,74 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Bubble Chat</title>
   <link rel="stylesheet" href="styles.css">
-  <script src="components.js" defer></script>
-  <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script> <!-- Include the Socket.IO library -->
-  <script src="app.js" defer></script> <!-- Link to your chat app JavaScript -->
+  <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
 </head>
 <body>
-  <button id="logout-btn">Logout</button>
+  <header class="chat-header">
+    <h1>Bubble Chat</h1>
+    <button id="theme-btn">Change Theme</button>
+    <button id="font-btn">Change Font</button>
+    <button id="logout-btn">Logout</button>
+  </header>
+
   <main class="chat-container">
-    <div id="chat-box">
-      <!-- Messages will appear here -->
-    </div>
-    <form id="chat-form">
-      <input type="text" id="message" placeholder="Type a message" required>
+    <div id="chat-box" class="chat-box"></div>
+    <form id="chat-form" class="chat-form">
+      <input type="text" id="message" placeholder="Type a message..." required>
       <button type="submit">Send</button>
     </form>
   </main>
 
   <script>
-    // Check if user data exists in sessionStorage
+    // User session check
     const user = JSON.parse(sessionStorage.getItem('user'));
-
-    // If no user data is found, redirect to login page
     if (!user) {
       alert('You must be logged in to access the chat.');
-      window.location.href = 'login.html'; // Redirect to login page
+      window.location.href = 'login.html';
     }
 
-    // Connect to the WebSocket server using Socket.IO
-    const socket = io('http://localhost:5000'); // Assuming your server is running on port 5000
+    const socket = io('http://localhost:5000');
 
-    // Emit a message to the server when the user submits the form
-    const chatForm = document.getElementById('chat-form');
-    const messageInput = document.getElementById('message');
-    const chatBox = document.getElementById('chat-box');
-
-    chatForm.addEventListener('submit', (e) => {
+    // Sending a message
+    document.getElementById('chat-form').addEventListener('submit', (e) => {
       e.preventDefault();
-
-      const message = messageInput.value;
-      console.log('Sending message:', message); // Debugging line
-
-      // Emit the message to the server
-      socket.emit('sendMessage', { user: user.email, message });
-
-      // Clear the input field
-      messageInput.value = '';
+      const message = document.getElementById('message').value;
+      socket.emit('sendMessage', { user: user.username, message });
+      document.getElementById('message').value = '';
     });
 
-    // Listen for incoming messages from the server
+    // Receiving messages
     socket.on('receiveMessage', (data) => {
-      console.log('Received message from server:', data);  // Debugging line
-
+      const chatBox = document.getElementById('chat-box');
       const messageElement = document.createElement('div');
-      messageElement.classList.add('message');
+      messageElement.classList.add('chat-bubble');
       messageElement.textContent = `${data.user}: ${data.message}`;
       chatBox.appendChild(messageElement);
-      chatBox.scrollTop = chatBox.scrollHeight; // Scroll to the bottom
+      chatBox.scrollTop = chatBox.scrollHeight;
     });
 
-    // Logout logic
-    const logoutButton = document.getElementById('logout-btn');
-    logoutButton.addEventListener('click', () => {
-      // Remove user data from sessionStorage
+    // Logout functionality
+    document.getElementById('logout-btn').addEventListener('click', () => {
       sessionStorage.removeItem('user');
-      // Redirect to the login page after logout
       window.location.href = 'login.html';
+    });
+
+    // Theme selection
+    const themes = ['theme-light', 'theme-dark', 'theme-gradient'];
+    let currentTheme = 0;
+    document.getElementById('theme-btn').addEventListener('click', () => {
+      document.body.classList.remove(themes[currentTheme]);
+      currentTheme = (currentTheme + 1) % themes.length;
+      document.body.classList.add(themes[currentTheme]);
+    });
+
+    // Font selection
+    const fonts = ['font-poppins', 'font-roboto', 'font-mono'];
+    let currentFont = 0;
+    document.getElementById('font-btn').addEventListener('click', () => {
+      document.body.classList.remove(fonts[currentFont]);
+      currentFont = (currentFont + 1) % fonts.length;
+      document.body.classList.add(fonts[currentFont]);
     });
   </script>
 </body>
