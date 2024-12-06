@@ -10,21 +10,25 @@
 <body>
   <header class="chat-header">
     <h1>Bubble Chat</h1>
-    <button id="theme-btn">Change Theme</button>
-    <button id="font-btn">Change Font</button>
-    <button id="logout-btn">Logout</button>
+    <div>
+      <button id="theme-btn">Change Theme</button>
+      <button id="logout-btn">Logout</button>
+    </div>
+    <div class="search-container">
+      <input id="search-input" type="text" placeholder="Search users by username, email, or phone">
+      <button id="search-btn">Search</button>
+    </div>
+    <div id="search-results" class="search-results"></div>
   </header>
-
   <main class="chat-container">
     <div id="chat-box" class="chat-box"></div>
     <form id="chat-form" class="chat-form">
       <input type="text" id="message" placeholder="Type a message..." required>
       <button type="submit">Send</button>
     </form>
+    <div id="typing-indicator" class="typing-indicator"></div>
   </main>
-
   <script>
-    // User session check
     const user = JSON.parse(sessionStorage.getItem('user'));
     if (!user) {
       alert('You must be logged in to access the chat.');
@@ -32,47 +36,99 @@
     }
 
     const socket = io('http://localhost:5000');
+    let currentRoom = 'global';
+    let lastMessageDate = null;
 
-    // Sending a message
+    // Emit user connection
+    socket.emit('userConnected', user.username);
+
+    // Display the user list with status
+    socket.on('userList', (users) => {
+      const searchResults = document.getElementById('search-results');
+      searchResults.innerHTML = '';
+      const now = new Date();
+
+      users.forEach(({ username, lastSeen, status }) => {
+        if (username !== user.username) {
+          let dotColor = 'red'; // Default to red for offline >7 days
+
+          if (status === 'online') {
+            dotColor = 'green';
+          } else if (lastSeen) {
+            const lastSeenDate = new Date(lastSeen);
+            const diffHours = Math.abs(now - lastSeenDate) / (1000 * 60 * 60);
+
+            if (diffHours < 24) dotColor = 'yellow'; // Offline for <1 day
+          }
+
+          const userDiv = document.createElement('div');
+          userDiv.innerHTML = `
+            <span class="status-dot" style="background-color: ${dotColor};"></span>
+            ${username}
+          `;
+          userDiv.classList.add('search-result');
+          userDiv.addEventListener('click', () => startPrivateChat(username));
+          searchResults.appendChild(userDiv);
+        }
+      });
+    });
+
+    // Start private chat
+    function startPrivateChat(selectedUser) {
+      currentRoom = `private-${[user.username, selectedUser].sort().join('-')}`;
+      socket.emit('joinRoom', currentRoom);
+      document.getElementById('chat-box').innerHTML = '';
+      document.getElementById('typing-indicator').textContent = `Chatting with ${selectedUser}`;
+    }
+
+    // Send messages
     document.getElementById('chat-form').addEventListener('submit', (e) => {
       e.preventDefault();
-      const message = document.getElementById('message').value;
-      socket.emit('sendMessage', { user: user.username, message });
-      document.getElementById('message').value = '';
+      const message = document.getElementById('message').value.trim();
+      if (message) {
+        const timestamp = new Date().toISOString();
+        socket.emit('sendMessage', { room: currentRoom, user: user.username, message, timestamp });
+        document.getElementById('message').value = '';
+      }
     });
 
-    // Receiving messages
+    // Receive messages
     socket.on('receiveMessage', (data) => {
+      const isCurrentRoom = data.room === currentRoom;
+      const displayUser = data.user === user.username ? 'You' : data.user;
+
+      if (isCurrentRoom) {
+        addMessage({ user: displayUser, message: data.message, timestamp: data.timestamp });
+      }
+    });
+
+    // Add message to chat box
+    function addMessage({ user, message, timestamp }) {
       const chatBox = document.getElementById('chat-box');
+      const messageDate = new Date(timestamp).toLocaleDateString();
+
+      if (lastMessageDate !== messageDate) {
+        const dayBlock = document.createElement('div');
+        dayBlock.classList.add('day-block');
+        dayBlock.textContent = messageDate;
+        chatBox.appendChild(dayBlock);
+        lastMessageDate = messageDate;
+      }
+
       const messageElement = document.createElement('div');
-      messageElement.classList.add('chat-bubble');
-      messageElement.textContent = `${data.user}: ${data.message}`;
+      messageElement.classList.add('chat-bubble', user === 'You' ? 'user' : 'other');
+      messageElement.innerHTML = `
+        <span>${user}: ${message}</span>
+        <span class="timestamp">${new Date(timestamp).toLocaleTimeString()}</span>
+      `;
       chatBox.appendChild(messageElement);
       chatBox.scrollTop = chatBox.scrollHeight;
-    });
+    }
 
-    // Logout functionality
+    // Logout
     document.getElementById('logout-btn').addEventListener('click', () => {
       sessionStorage.removeItem('user');
       window.location.href = 'login.html';
-    });
-
-    // Theme selection
-    const themes = ['theme-light', 'theme-dark', 'theme-gradient'];
-    let currentTheme = 0;
-    document.getElementById('theme-btn').addEventListener('click', () => {
-      document.body.classList.remove(themes[currentTheme]);
-      currentTheme = (currentTheme + 1) % themes.length;
-      document.body.classList.add(themes[currentTheme]);
-    });
-
-    // Font selection
-    const fonts = ['font-poppins', 'font-roboto', 'font-mono'];
-    let currentFont = 0;
-    document.getElementById('font-btn').addEventListener('click', () => {
-      document.body.classList.remove(fonts[currentFont]);
-      currentFont = (currentFont + 1) % fonts.length;
-      document.body.classList.add(fonts[currentFont]);
     });
   </script>
 </body>
