@@ -1,52 +1,82 @@
 const express = require('express');
-const cors = require('cors');
 const http = require('http');
-const { Server } = require('socket.io');
+const socketIO = require('socket.io');
+const cors = require('cors');
 
 const app = express();
+const server = http.createServer(app);
+const io = socketIO(server, {
+  cors: {
+    origin: '*',
+  },
+});
+
 app.use(cors());
 app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
-const users = [];
-
-app.post('/api/signup', (req, res) => {
-  const { email, password, username, phone } = req.body;
-
-  if (!email || !password || !username || !phone) {
-    return res.status(400).json({ error: 'All fields are required' });
-  }
-
-  if (users.find((user) => user.email === email || user.phone === phone)) {
-    return res.status(400).json({ error: 'User already exists' });
-  }
-
-  users.push({ email, password, username, phone });
-  res.status(201).json({ message: 'User registered successfully' });
-});
-
-app.post('/api/login', (req, res) => {
-  const { loginContact, loginPassword } = req.body;
-
-  const user = users.find(
-    (user) =>
-      (user.email === loginContact || user.username === loginContact || user.phone === loginContact) &&
-      user.password === loginPassword
-  );
-
-  if (!user) {
-    return res.status(401).json({ error: 'Invalid login credentials' });
-  }
-
-  res.json({ user });
-});
-
-const server = http.createServer(app);
-const io = new Server(server, { cors: { origin: '*' } });
+let users = [];
+let friends = {};
 
 io.on('connection', (socket) => {
-  socket.on('sendMessage', (data) => {
-    io.emit('receiveMessage', data);
+  console.log(`User connected: ${socket.id}`);
+
+  socket.on('userConnected', (username) => {
+    socket.username = username;
+
+    // Add user to the users list if not already present
+    if (!users.some((u) => u.username === username)) {
+      users.push({ username, status: 'online', lastSeen: null });
+    } else {
+      const user = users.find((u) => u.username === username);
+      user.status = 'online';
+    }
+
+    // Emit the updated user list to all clients
+    io.emit('userList', users);
+  });
+
+  socket.on('searchUsers', (query) => {
+    const searchResults = users.filter((user) =>
+      user.username.toLowerCase().includes(query.toLowerCase())
+    );
+    socket.emit('searchResults', searchResults);
+  });
+
+  socket.on('addFriend', ({ friendUsername, username }) => {
+    if (!friends[username]) friends[username] = [];
+    if (!friends[username].includes(friendUsername)) {
+      friends[username].push(friendUsername);
+    }
+  });
+
+  socket.on('privateMessage', ({ from, to, message }) => {
+    const recipientSocket = Array.from(io.sockets.sockets.values()).find(
+      (s) => s.username === to
+    );
+
+    if (recipientSocket) {
+      recipientSocket.emit('receivePrivateMessage', { from, message });
+    }
+
+    socket.emit('receivePrivateMessage', { from, message });
+  });
+
+  socket.on('userTyping', ({ room, username }) => {
+    socket.to(room).emit('typing', { username });
+  });
+
+  socket.on('disconnect', () => {
+    console.log(`User disconnected: ${socket.id}`);
+    const user = users.find((u) => u.username === socket.username);
+    if (user) {
+      user.status = 'offline';
+      user.lastSeen = new Date().toISOString();
+      io.emit('userList', users);
+    }
   });
 });
 
-server.listen(5000, () => console.log('Server running on http://localhost:5000'));
+server.listen(5000, () => {
+  console.log('Server running on http://localhost:5000');
+});

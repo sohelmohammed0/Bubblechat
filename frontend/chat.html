@@ -5,130 +5,188 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Bubble Chat</title>
   <link rel="stylesheet" href="styles.css">
-  <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
 </head>
 <body>
-  <header class="chat-header">
-    <h1>Bubble Chat</h1>
-    <div>
-      <button id="theme-btn">Change Theme</button>
-      <button id="logout-btn">Logout</button>
-    </div>
-    <div class="search-container">
-      <input id="search-input" type="text" placeholder="Search users by username, email, or phone">
-      <button id="search-btn">Search</button>
-    </div>
-    <div id="search-results" class="search-results"></div>
-  </header>
-  <main class="chat-container">
-    <div id="chat-box" class="chat-box"></div>
-    <form id="chat-form" class="chat-form">
-      <input type="text" id="message" placeholder="Type a message..." required>
-      <button type="submit">Send</button>
-    </form>
-    <div id="typing-indicator" class="typing-indicator"></div>
-  </main>
+  <div class="container">
+    <aside class="sidebar">
+      <header class="sidebar-header">
+        <h2>Bubble Chat</h2>
+        <button id="logout-btn" class="logout-btn"><i class="fas fa-sign-out-alt"></i></button>
+      </header>
+      <div class="search-container">
+        <input id="search-input" type="text" placeholder="Search users or groups">
+        <i class="fas fa-search search-icon"></i>
+      </div>
+      <ul class="chat-list" id="user-list"></ul>
+      <ul class="friends-list" id="friends-list"></ul>
+    </aside>
+
+    <section class="chat-section">
+      <header class="chat-header">
+        <div class="chat-info">
+          <span id="current-chat-name">Your Username</span>
+          <small id="current-chat-status">Online</small>
+        </div>
+        <button id="theme-btn" class="theme-btn"><i class="fas fa-moon"></i></button>
+      </header>
+
+      <div class="chat-box" id="chat-box"></div>
+
+      <div class="chat-footer">
+        <label for="media" class="media-btn"><i class="fas fa-paperclip"></i></label>
+        <input type="file" id="media" class="hidden">
+        <input type="text" id="message" placeholder="Type a message...">
+        <button id="send-btn"><i class="fas fa-paper-plane"></i></button>
+      </div>
+
+      <div id="private-chats" class="private-chats-container"></div>
+    </section>
+  </div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.5.4/socket.io.js"></script>
   <script>
-    const user = JSON.parse(sessionStorage.getItem('user'));
-    if (!user) {
-      alert('You must be logged in to access the chat.');
-      window.location.href = 'login.html';
-    }
+    document.addEventListener('DOMContentLoaded', () => {
+      const socket = io('http://localhost:5000');
+      const user = JSON.parse(sessionStorage.getItem('user'));
 
-    const socket = io('http://localhost:5000');
-    let currentRoom = 'global';
-    let lastMessageDate = null;
+      if (!user) {
+        alert('You must be logged in to access the chat.');
+        window.location.href = 'login.html';
+      }
 
-    // Emit user connection
-    socket.emit('userConnected', user.username);
+      const logoutBtn = document.getElementById('logout-btn');
+      const themeBtn = document.getElementById('theme-btn');
+      const messageInput = document.getElementById('message');
+      const chatBox = document.getElementById('chat-box');
+      const userList = document.getElementById('user-list');
+      const searchInput = document.getElementById('search-input');
+      const friendsList = document.getElementById('friends-list');
+      const privateChats = document.getElementById('private-chats');
+      const currentChatName = document.getElementById('current-chat-name');
+      const currentChatStatus = document.getElementById('current-chat-status');
 
-    // Display the user list with status
-    socket.on('userList', (users) => {
-      const searchResults = document.getElementById('search-results');
-      searchResults.innerHTML = '';
-      const now = new Date();
+      let currentRoom = 'global';
+      const friends = [];
 
-      users.forEach(({ username, lastSeen, status }) => {
-        if (username !== user.username) {
-          let dotColor = 'red'; // Default to red for offline >7 days
+      currentChatName.textContent = user.username;
+      currentChatStatus.textContent = 'Online';
 
-          if (status === 'online') {
-            dotColor = 'green';
-          } else if (lastSeen) {
-            const lastSeenDate = new Date(lastSeen);
-            const diffHours = Math.abs(now - lastSeenDate) / (1000 * 60 * 60);
+      socket.emit('userConnected', user.username);
 
-            if (diffHours < 24) dotColor = 'yellow'; // Offline for <1 day
-          }
-
-          const userDiv = document.createElement('div');
-          userDiv.innerHTML = `
-            <span class="status-dot" style="background-color: ${dotColor};"></span>
-            ${username}
-          `;
-          userDiv.classList.add('search-result');
-          userDiv.addEventListener('click', () => startPrivateChat(username));
-          searchResults.appendChild(userDiv);
+      searchInput.addEventListener('input', () => {
+        const query = searchInput.value.trim();
+        if (query) {
+          socket.emit('searchUsers', query);
+        } else {
+          userList.innerHTML = '';
         }
       });
-    });
 
-    // Start private chat
-    function startPrivateChat(selectedUser) {
-      currentRoom = `private-${[user.username, selectedUser].sort().join('-')}`;
-      socket.emit('joinRoom', currentRoom);
-      document.getElementById('chat-box').innerHTML = '';
-      document.getElementById('typing-indicator').textContent = `Chatting with ${selectedUser}`;
-    }
+      socket.on('searchResults', (results) => {
+        userList.innerHTML = '';
+        results.forEach(({ username, status }) => {
+          const li = document.createElement('li');
+          li.innerHTML = `
+            <span>${username}</span>
+            <button class="add-btn" data-username="${username}">
+              <i class="fas fa-plus"></i>
+            </button>
+          `;
+          li.className = status === 'online' ? 'online' : 'offline';
+          li.querySelector('.add-btn').addEventListener('click', () => addFriend(username));
+          li.addEventListener('click', () => openPrivateChat(username));
+          userList.appendChild(li);
+        });
+      });
 
-    // Send messages
-    document.getElementById('chat-form').addEventListener('submit', (e) => {
-      e.preventDefault();
-      const message = document.getElementById('message').value.trim();
-      if (message) {
-        const timestamp = new Date().toISOString();
-        socket.emit('sendMessage', { room: currentRoom, user: user.username, message, timestamp });
-        document.getElementById('message').value = '';
-      }
-    });
-
-    // Receive messages
-    socket.on('receiveMessage', (data) => {
-      const isCurrentRoom = data.room === currentRoom;
-      const displayUser = data.user === user.username ? 'You' : data.user;
-
-      if (isCurrentRoom) {
-        addMessage({ user: displayUser, message: data.message, timestamp: data.timestamp });
-      }
-    });
-
-    // Add message to chat box
-    function addMessage({ user, message, timestamp }) {
-      const chatBox = document.getElementById('chat-box');
-      const messageDate = new Date(timestamp).toLocaleDateString();
-
-      if (lastMessageDate !== messageDate) {
-        const dayBlock = document.createElement('div');
-        dayBlock.classList.add('day-block');
-        dayBlock.textContent = messageDate;
-        chatBox.appendChild(dayBlock);
-        lastMessageDate = messageDate;
+      function addFriend(friendUsername) {
+        if (!friends.includes(friendUsername)) {
+          friends.push(friendUsername);
+          updateFriendsList();
+          socket.emit('addFriend', { friendUsername, username: user.username });
+          alert(`${friendUsername} added to your friends list.`);
+        } else {
+          alert('This user is already in your friends list.');
+        }
       }
 
-      const messageElement = document.createElement('div');
-      messageElement.classList.add('chat-bubble', user === 'You' ? 'user' : 'other');
-      messageElement.innerHTML = `
-        <span>${user}: ${message}</span>
-        <span class="timestamp">${new Date(timestamp).toLocaleTimeString()}</span>
-      `;
-      chatBox.appendChild(messageElement);
-      chatBox.scrollTop = chatBox.scrollHeight;
-    }
+      function updateFriendsList() {
+        friendsList.innerHTML = '';
+        friends.forEach((friend) => {
+          const li = document.createElement('li');
+          li.textContent = friend;
+          li.addEventListener('click', () => openPrivateChat(friend));
+          friendsList.appendChild(li);
+        });
+      }
 
-    // Logout
-    document.getElementById('logout-btn').addEventListener('click', () => {
-      sessionStorage.removeItem('user');
-      window.location.href = 'login.html';
+      function openPrivateChat(friendUsername) {
+        const existingChat = document.getElementById(`chat-${friendUsername}`);
+        if (existingChat) {
+          existingChat.style.display = 'block';
+          return;
+        }
+
+        const chatWindow = document.createElement('div');
+        chatWindow.id = `chat-${friendUsername}`;
+        chatWindow.className = 'private-chat';
+        chatWindow.innerHTML = `
+          <header>
+            <span>${friendUsername}</span>
+            <button class="close-chat-btn">&times;</button>
+          </header>
+          <div class="private-chat-box"></div>
+          <input type="text" placeholder="Type a message" class="private-message">
+          <button class="send-private-btn">Send</button>
+        `;
+
+        privateChats.appendChild(chatWindow);
+
+        const sendButton = chatWindow.querySelector('.send-private-btn');
+        const messageInput = chatWindow.querySelector('.private-message');
+        const chatBox = chatWindow.querySelector('.private-chat-box');
+
+        sendButton.addEventListener('click', () => {
+          const message = messageInput.value.trim();
+          if (message) {
+            socket.emit('privateMessage', { from: user.username, to: friendUsername, message });
+            messageInput.value = '';
+            const msgElem = document.createElement('div');
+            msgElem.textContent = `You: ${message}`;
+            chatBox.appendChild(msgElem);
+          }
+        });
+
+        chatWindow.querySelector('.close-chat-btn').addEventListener('click', () => {
+          chatWindow.style.display = 'none';
+        });
+
+        socket.on('receivePrivateMessage', (data) => {
+          if (data.from === friendUsername || data.to === friendUsername) {
+            const msgElem = document.createElement('div');
+            msgElem.textContent = `${data.from}: ${data.message}`;
+            chatBox.appendChild(msgElem);
+          }
+        });
+      }
+
+      logoutBtn.addEventListener('click', () => {
+        sessionStorage.removeItem('user');
+        socket.emit('userDisconnected', user.username);
+        window.location.href = 'login.html';
+      });
+
+      const themes = ['#6a11cb', '#ff9a9e', '#1c1c1c', '#2bc0e4', '#a8e063'];
+      let themeIndex = parseInt(localStorage.getItem('theme'), 10) || 0;
+
+      themeBtn.addEventListener('click', () => {
+        themeIndex = (themeIndex + 1) % themes.length;
+        document.body.style.background = themes[themeIndex];
+        localStorage.setItem('theme', themeIndex);
+      });
+
+      document.body.style.background = themes[themeIndex];
     });
   </script>
 </body>
