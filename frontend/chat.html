@@ -9,6 +9,7 @@
 </head>
 <body>
   <div class="container">
+    <!-- Sidebar -->
     <aside class="sidebar">
       <header class="sidebar-header">
         <h2>Bubble Chat</h2>
@@ -19,9 +20,9 @@
         <i class="fas fa-search search-icon"></i>
       </div>
       <ul class="chat-list" id="user-list"></ul>
-      <ul class="friends-list" id="friends-list"></ul>
     </aside>
 
+    <!-- Chat Section -->
     <section class="chat-section">
       <header class="chat-header">
         <div class="chat-info">
@@ -33,17 +34,17 @@
 
       <div class="chat-box" id="chat-box"></div>
 
+      <!-- Chat Footer -->
       <div class="chat-footer">
         <label for="media" class="media-btn"><i class="fas fa-paperclip"></i></label>
         <input type="file" id="media" class="hidden">
         <input type="text" id="message" placeholder="Type a message...">
         <button id="send-btn"><i class="fas fa-paper-plane"></i></button>
       </div>
-
-      <div id="private-chats" class="private-chats-container"></div>
     </section>
   </div>
 
+  <!-- Scripts -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.5.4/socket.io.js"></script>
   <script>
     document.addEventListener('DOMContentLoaded', () => {
@@ -53,6 +54,7 @@
       if (!user) {
         alert('You must be logged in to access the chat.');
         window.location.href = 'login.html';
+        return;
       }
 
       const logoutBtn = document.getElementById('logout-btn');
@@ -61,13 +63,10 @@
       const chatBox = document.getElementById('chat-box');
       const userList = document.getElementById('user-list');
       const searchInput = document.getElementById('search-input');
-      const friendsList = document.getElementById('friends-list');
-      const privateChats = document.getElementById('private-chats');
       const currentChatName = document.getElementById('current-chat-name');
       const currentChatStatus = document.getElementById('current-chat-status');
 
       let currentRoom = 'global';
-      const friends = [];
 
       currentChatName.textContent = user.username;
       currentChatStatus.textContent = 'Online';
@@ -87,89 +86,36 @@
         userList.innerHTML = '';
         results.forEach(({ username, status }) => {
           const li = document.createElement('li');
-          li.innerHTML = `
-            <span>${username}</span>
-            <button class="add-btn" data-username="${username}">
-              <i class="fas fa-plus"></i>
-            </button>
-          `;
+          li.innerHTML = `<span>${username}</span>`;
           li.className = status === 'online' ? 'online' : 'offline';
-          li.querySelector('.add-btn').addEventListener('click', () => addFriend(username));
-          li.addEventListener('click', () => openPrivateChat(username));
+          li.addEventListener('click', () => {
+            currentRoom = `${user.username}-${username}`;
+            currentChatName.textContent = username;
+            socket.emit('joinRoom', currentRoom);
+          });
           userList.appendChild(li);
         });
       });
 
-      function addFriend(friendUsername) {
-        if (!friends.includes(friendUsername)) {
-          friends.push(friendUsername);
-          updateFriendsList();
-          socket.emit('addFriend', { friendUsername, username: user.username });
-          alert(`${friendUsername} added to your friends list.`);
-        } else {
-          alert('This user is already in your friends list.');
+      document.getElementById('send-btn').addEventListener('click', () => {
+        const message = messageInput.value.trim();
+        if (message) {
+          socket.emit('sendMessage', {
+            room: currentRoom,
+            message,
+            sender: user.username,
+          });
+          messageInput.value = '';
         }
-      }
+      });
 
-      function updateFriendsList() {
-        friendsList.innerHTML = '';
-        friends.forEach((friend) => {
-          const li = document.createElement('li');
-          li.textContent = friend;
-          li.addEventListener('click', () => openPrivateChat(friend));
-          friendsList.appendChild(li);
-        });
-      }
-
-      function openPrivateChat(friendUsername) {
-        const existingChat = document.getElementById(`chat-${friendUsername}`);
-        if (existingChat) {
-          existingChat.style.display = 'block';
-          return;
-        }
-
-        const chatWindow = document.createElement('div');
-        chatWindow.id = `chat-${friendUsername}`;
-        chatWindow.className = 'private-chat';
-        chatWindow.innerHTML = `
-          <header>
-            <span>${friendUsername}</span>
-            <button class="close-chat-btn">&times;</button>
-          </header>
-          <div class="private-chat-box"></div>
-          <input type="text" placeholder="Type a message" class="private-message">
-          <button class="send-private-btn">Send</button>
-        `;
-
-        privateChats.appendChild(chatWindow);
-
-        const sendButton = chatWindow.querySelector('.send-private-btn');
-        const messageInput = chatWindow.querySelector('.private-message');
-        const chatBox = chatWindow.querySelector('.private-chat-box');
-
-        sendButton.addEventListener('click', () => {
-          const message = messageInput.value.trim();
-          if (message) {
-            socket.emit('privateMessage', { from: user.username, to: friendUsername, message });
-            messageInput.value = '';
-            const msgElem = document.createElement('div');
-            msgElem.textContent = `You: ${message}`;
-            chatBox.appendChild(msgElem);
-          }
-        });
-
-        chatWindow.querySelector('.close-chat-btn').addEventListener('click', () => {
-          chatWindow.style.display = 'none';
-        });
-
-        socket.on('receivePrivateMessage', (data) => {
-          if (data.from === friendUsername || data.to === friendUsername) {
-            const msgElem = document.createElement('div');
-            msgElem.textContent = `${data.from}: ${data.message}`;
-            chatBox.appendChild(msgElem);
-          }
-        });
-      }
+      socket.on('receiveMessage', (data) => {
+        const messageElem = document.createElement('div');
+        messageElem.className = data.sender === user.username ? 'chat-bubble user' : 'chat-bubble other';
+        messageElem.innerHTML = `<p>${data.sender}: ${data.message}</p>`;
+        chatBox.appendChild(messageElem);
+        chatBox.scrollTop = chatBox.scrollHeight;
+      });
 
       logoutBtn.addEventListener('click', () => {
         sessionStorage.removeItem('user');
@@ -177,17 +123,46 @@
         window.location.href = 'login.html';
       });
 
-      const themes = ['#6a11cb', '#ff9a9e', '#1c1c1c', '#2bc0e4', '#a8e063'];
-      let themeIndex = parseInt(localStorage.getItem('theme'), 10) || 0;
-
+      const themes = ['#ff9a9e', '#6a11cb', '#1c1c1c', '#2bc0e4', '#a8e063'];
+      let themeIndex = 0;
       themeBtn.addEventListener('click', () => {
         themeIndex = (themeIndex + 1) % themes.length;
         document.body.style.background = themes[themeIndex];
-        localStorage.setItem('theme', themeIndex);
       });
-
-      document.body.style.background = themes[themeIndex];
     });
+
+    // Fetch and display last seen
+socket.emit('getLastSeen', chatWith);
+
+socket.on('lastSeen', ({ username, lastSeen }) => {
+  if (username === chatWith) {
+    currentChatStatus.textContent = lastSeen;
+  }
+});
+
+
+li.querySelector('.start-chat-btn').addEventListener('click', () => {
+  chatWith = username;
+  currentChatName.textContent = username;
+  currentRoom = `${user.username}-${username}`;
+  socket.emit('joinRoom', { room: currentRoom, username });
+  socket.emit('getLastSeen', username);
+});
+
+
+socket.on('receiveMessage', (data) => {
+  if (data.room === currentRoom) {
+    const messageElem = document.createElement('div');
+    messageElem.className = data.sender === user.username ? 'chat-bubble user' : 'chat-bubble other';
+    messageElem.innerHTML = `
+      <p><strong>${data.sender}:</strong> ${data.message}</p>
+      <small>${new Date(data.timestamp).toLocaleString()}</small>
+    `;
+    chatBox.appendChild(messageElem);
+    chatBox.scrollTop = chatBox.scrollHeight;
+  }
+});
+
   </script>
 </body>
 </html>
