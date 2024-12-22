@@ -2,14 +2,15 @@ const express = require('express');
 const cors = require('cors');
 const http = require('http');
 const { Server } = require('socket.io');
-const activeUsers = {};
-
 
 const app = express();
 app.use(cors());
 app.use(express.json());
 
 const users = [];
+const friendRequests = {};
+const friends = {};
+const activeUsers = {};
 
 // User Registration
 app.post('/api/signup', (req, res) => {
@@ -53,7 +54,8 @@ io.on('connection', (socket) => {
   console.log('A user connected.');
 
   socket.on('userConnected', (username) => {
-    console.log(`${username} connected`);
+    activeUsers[username] = { socketId: socket.id, lastSeen: 'Online' };
+    console.log(`${username} connected.`);
   });
 
   socket.on('joinRoom', (room) => {
@@ -61,41 +63,77 @@ io.on('connection', (socket) => {
   });
 
   socket.on('sendMessage', (data) => {
-    io.to(data.room).emit('receiveMessage', data);
+    io.to(data.room).emit(`receiveMessage-${data.room}`, data);
   });
 
-  socket.on('disconnect', () => {
-    console.log('A user disconnected.');
-  });
-});
-
-server.listen(5000, () => {
-  console.log('Server is running on port 5000');
-});
-
-// Join chats
-io.on('connection', (socket) => {
-  console.log('A user connected.');
-
-  // User connected
-  socket.on('userConnected', (username) => {
-    activeUsers[username] = { socketId: socket.id, lastSeen: 'Online' };
-    console.log(`${username} connected.`);
+  socket.on('sendFile', (data) => {
+    io.to(data.room).emit('receiveFile', data);
   });
 
-  // Join Room
-  socket.on('joinRoom', ({ room, username }) => {
-    socket.join(room);
-    console.log(`${username} joined room ${room}`);
-    io.to(room).emit('roomJoined', { room, username });
+  socket.on('sendFriendRequest', ({ from, to }) => {
+    console.log(`Friend request from ${from} to ${to}`);
+    if (!friendRequests[to]) {
+      friendRequests[to] = [];
+    }
+    if (!friends[to]) {
+      friends[to] = [];
+    }
+    if (!friends[from]) {
+      friends[from] = [];
+    }
+    
+    // Check if the request already exists
+    if (!friendRequests[to].includes(from) && !friends[from].includes(to) && !friends[to].includes(from)) {
+      friendRequests[to].push(from);
+      const toSocketId = activeUsers[to]?.socketId;
+      if (toSocketId) {
+        console.log(`Notifying ${to} about the friend request from ${from}`);
+        io.to(toSocketId).emit('friendRequestReceived', { from });
+      }
+    }
   });
 
-  // Send Message
-  socket.on('sendMessage', (data) => {
-    io.to(data.room).emit('receiveMessage', data);
+  socket.on('acceptFriendRequest', ({ from, to }) => {
+    if (!friends[to]) {
+      friends[to] = [];
+    }
+    if (!friends[from]) {
+      friends[from] = [];
+    }
+    friends[to].push(from);
+    friends[from].push(to);
+    friendRequests[to] = friendRequests[to].filter(request => request !== from);
+
+    const fromSocketId = activeUsers[from]?.socketId;
+    const toSocketId = activeUsers[to]?.socketId;
+    if (fromSocketId) {
+      io.to(fromSocketId).emit('friendRequestAccepted', { from: to });
+    }
+    if (toSocketId) {
+      io.to(toSocketId).emit('friendRequestAccepted', { from });
+    }
+    io.to(fromSocketId).emit('friendListUpdated');
+    io.to(toSocketId).emit('friendListUpdated');
   });
 
-  // User disconnected
+  socket.on('unfriend', ({ from, to }) => {
+    if (friends[from]) {
+      friends[from] = friends[from].filter(friend => friend !== to);
+    }
+    if (friends[to]) {
+      friends[to] = friends[to].filter(friend => friend !== from);
+    }
+
+    const fromSocketId = activeUsers[from]?.socketId;
+    const toSocketId = activeUsers[to]?.socketId;
+    if (fromSocketId) {
+      io.to(fromSocketId).emit('friendListUpdated');
+    }
+    if (toSocketId) {
+      io.to(toSocketId).emit('friendListUpdated');
+    }
+  });
+
   socket.on('disconnect', () => {
     const disconnectedUser = Object.keys(activeUsers).find(
       (user) => activeUsers[user].socketId === socket.id
@@ -107,7 +145,22 @@ io.on('connection', (socket) => {
     }
   });
 
-  // Handle fetching last seen
+  socket.on('searchUsers', (query) => {
+    const results = users.filter(user => user.username.includes(query))
+      .map(user => ({ username: user.username, status: user.status }));
+
+    socket.emit('searchResults', results);
+  });
+
+  socket.on('getUserFriends', ({ username }, callback) => {
+    const userFriends = friends[username] || [];
+    const friendDetails = userFriends.map(friend => {
+      const user = users.find(u => u.username === friend);
+      return { username: friend, status: user.status };
+    });
+    callback(friendDetails);
+  });
+
   socket.on('getLastSeen', (username) => {
     const user = activeUsers[username];
     const lastSeen = user ? 'Online' : user?.lastSeen || 'Offline';
@@ -115,3 +168,6 @@ io.on('connection', (socket) => {
   });
 });
 
+server.listen(5000, () => {
+  console.log('Server is running on port 5000');
+});

@@ -20,31 +20,23 @@
         <i class="fas fa-search search-icon"></i>
       </div>
       <ul class="chat-list" id="user-list"></ul>
+      <ul class="friend-requests" id="friend-requests"></ul>
     </aside>
-
-    <!-- Chat Section -->
-    <section class="chat-section">
-      <header class="chat-header">
-        <div class="chat-info">
-          <span id="current-chat-name">Your Username</span>
-          <small id="current-chat-status">Online</small>
-        </div>
-        <button id="theme-btn" class="theme-btn"><i class="fas fa-moon"></i></button>
-      </header>
-
-      <div class="chat-box" id="chat-box"></div>
-
-      <!-- Chat Footer -->
-      <div class="chat-footer">
-        <label for="media" class="media-btn"><i class="fas fa-paperclip"></i></label>
-        <input type="file" id="media" class="hidden">
-        <input type="text" id="message" placeholder="Type a message...">
-        <button id="send-btn"><i class="fas fa-paper-plane"></i></button>
-      </div>
-    </section>
   </div>
 
-  <!-- Scripts -->
+  <!-- Chat Popup Template -->
+  <div id="chat-popup-template" class="chat-popup hidden">
+    <header class="chat-popup-header">
+      <span class="chat-popup-name"></span>
+      <button class="close-popup-btn"><i class="fas fa-times"></i></button>
+    </header>
+    <div class="chat-popup-box"></div>
+    <div class="chat-popup-footer">
+      <input type="text" class="popup-message" placeholder="Type a message...">
+      <button class="popup-send-btn"><i class="fas fa-paper-plane"></i></button>
+    </div>
+  </div>
+
   <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.5.4/socket.io.js"></script>
   <script>
     document.addEventListener('DOMContentLoaded', () => {
@@ -58,18 +50,9 @@
       }
 
       const logoutBtn = document.getElementById('logout-btn');
-      const themeBtn = document.getElementById('theme-btn');
-      const messageInput = document.getElementById('message');
-      const chatBox = document.getElementById('chat-box');
-      const userList = document.getElementById('user-list');
       const searchInput = document.getElementById('search-input');
-      const currentChatName = document.getElementById('current-chat-name');
-      const currentChatStatus = document.getElementById('current-chat-status');
-
-      let currentRoom = 'global';
-
-      currentChatName.textContent = user.username;
-      currentChatStatus.textContent = 'Online';
+      const userList = document.getElementById('user-list');
+      const friendRequestsList = document.getElementById('friend-requests');
 
       socket.emit('userConnected', user.username);
 
@@ -84,37 +67,27 @@
 
       socket.on('searchResults', (results) => {
         userList.innerHTML = '';
-        results.forEach(({ username, status }) => {
-          const li = document.createElement('li');
-          li.innerHTML = `<span>${username}</span>`;
-          li.className = status === 'online' ? 'online' : 'offline';
-          li.addEventListener('click', () => {
-            currentRoom = `${user.username}-${username}`;
-            currentChatName.textContent = username;
-            socket.emit('joinRoom', currentRoom);
+        if (results.length > 0) {
+          results.forEach(({ username, status }) => {
+            if (username !== user.username) {
+              const li = document.createElement('li');
+              li.innerHTML = `
+                <span>${username}</span>
+                <button class="add-btn">Add</button>
+              `;
+              li.className = status === 'online' ? 'online' : 'offline';
+              li.querySelector('.add-btn').addEventListener('click', () => {
+                socket.emit('sendFriendRequest', { from: user.username, to: username });
+              });
+              userList.appendChild(li);
+            }
           });
-          userList.appendChild(li);
-        });
-      });
-
-      document.getElementById('send-btn').addEventListener('click', () => {
-        const message = messageInput.value.trim();
-        if (message) {
-          socket.emit('sendMessage', {
-            room: currentRoom,
-            message,
-            sender: user.username,
-          });
-          messageInput.value = '';
+        } else {
+          const noUsers = document.createElement('li');
+          noUsers.innerHTML = 'No users found';
+          noUsers.className = 'no-users';
+          userList.appendChild(noUsers);
         }
-      });
-
-      socket.on('receiveMessage', (data) => {
-        const messageElem = document.createElement('div');
-        messageElem.className = data.sender === user.username ? 'chat-bubble user' : 'chat-bubble other';
-        messageElem.innerHTML = `<p>${data.sender}: ${data.message}</p>`;
-        chatBox.appendChild(messageElem);
-        chatBox.scrollTop = chatBox.scrollHeight;
       });
 
       logoutBtn.addEventListener('click', () => {
@@ -123,46 +96,140 @@
         window.location.href = 'login.html';
       });
 
-      const themes = ['#ff9a9e', '#6a11cb', '#1c1c1c', '#2bc0e4', '#a8e063'];
-      let themeIndex = 0;
-      themeBtn.addEventListener('click', () => {
-        themeIndex = (themeIndex + 1) % themes.length;
-        document.body.style.background = themes[themeIndex];
+      socket.on('friendRequestReceived', ({ from }) => {
+        const li = document.createElement('li');
+        li.innerHTML = `
+          <span>${from}</span>
+          <button class="accept-btn">Accept</button>
+        `;
+        li.querySelector('.accept-btn').addEventListener('click', () => {
+          socket.emit('acceptFriendRequest', { from, to: user.username });
+          friendRequestsList.removeChild(li);
+        });
+        friendRequestsList.appendChild(li);
       });
+
+      socket.on('friendRequestAccepted', ({ from }) => {
+        alert(`You are now friends with ${from}`);
+        updateUserList();
+      });
+
+      function openChatPopup(friendName) {
+        // Check if the chat popup for this friend already exists
+        let existingPopup = document.querySelector(`.chat-popup[data-friend="${friendName}"]`);
+        if (existingPopup) {
+          return; // If it exists, do nothing
+        }
+
+        const chatPopupTemplate = document.getElementById('chat-popup-template');
+        const chatPopup = chatPopupTemplate.cloneNode(true);
+        chatPopup.id = '';
+        chatPopup.classList.remove('hidden');
+        chatPopup.setAttribute('data-friend', friendName);
+        chatPopup.querySelector('.chat-popup-name').textContent = friendName;
+
+        const popupSendBtn = chatPopup.querySelector('.popup-send-btn');
+        const popupMessageInput = chatPopup.querySelector('.popup-message');
+        const popupChatBox = chatPopup.querySelector('.chat-popup-box');
+        const closePopupBtn = chatPopup.querySelector('.close-popup-btn');
+
+        const room = [user.username, friendName].sort().join('-');
+
+        // Join the room
+        socket.emit('joinRoom', room);
+
+        closePopupBtn.addEventListener('click', () => {
+          document.body.removeChild(chatPopup);
+          socket.emit('leaveRoom', room);
+        });
+
+        function sendMessage() {
+          const message = popupMessageInput.value.trim();
+          if (message) {
+            const timestamp = new Date().toISOString();
+            socket.emit('sendMessage', {
+              room,
+              message,
+              sender: user.username,
+              timestamp
+            });
+            popupMessageInput.value = ''; // Clear the input field
+          }
+        }
+
+        popupSendBtn.addEventListener('click', sendMessage);
+
+        // Use a unique event listener for each chat popup
+        socket.off(`receiveMessage-${room}`);
+        socket.on(`receiveMessage-${room}`, (data) => {
+          if (data.room === room) {
+            appendMessage(popupChatBox, data);
+          }
+        });
+
+        document.body.appendChild(chatPopup);
+      }
+
+      function appendMessage(chatBox, data) {
+        const messageElem = document.createElement('div');
+        messageElem.className = data.sender === user.username ? 'chat-bubble user' : 'chat-bubble other';
+        messageElem.innerHTML = `<p><strong>${data.sender}</strong>: ${data.message}</p>`;
+
+        // Append date if it's a new day
+        const lastMessage = chatBox.lastElementChild;
+        const lastMessageDate = lastMessage ? new Date(lastMessage.querySelector('p strong').dataset.timestamp).toDateString() : null;
+        const currentMessageDate = new Date(data.timestamp).toDateString();
+        if (lastMessageDate !== currentMessageDate) {
+          const dateElem = document.createElement('div');
+          dateElem.className = 'date-separator';
+          dateElem.textContent = formatDate(data.timestamp);
+          chatBox.appendChild(dateElem);
+        }
+
+        chatBox.appendChild(messageElem);
+        chatBox.scrollTop = chatBox.scrollHeight;
+      }
+
+      function formatTimestamp(timestamp) {
+        const date = new Date(timestamp);
+        const options = { hour: '2-digit', minute: '2-digit' };
+        return date.toLocaleTimeString('en-GB', options);
+      }
+
+      function formatDate(timestamp) {
+        const date = new Date(timestamp);
+        const options = { day: '2-digit', month: 'short', year: 'numeric' };
+        return date.toLocaleDateString('en-GB', options);
+      }
+
+      function updateUserList() {
+        socket.emit('getUserFriends', { username: user.username }, (friends) => {
+          userList.innerHTML = '';
+          friends.forEach(({ username, status }) => {
+            if (username !== user.username) {
+              const li = document.createElement('li');
+              li.innerHTML = `
+                <span>${username}</span>
+                <button class="message-btn">Message</button>
+                <button class="unfriend-btn">Unfriend</button>
+              `;
+              li.className = status === 'online' ? 'online' : 'offline';
+              li.querySelector('.message-btn').addEventListener('click', () => {
+                openChatPopup(username);
+              });
+              li.querySelector('.unfriend-btn').addEventListener('click', () => {
+                socket.emit('unfriend', { from: user.username, to: username });
+              });
+              userList.appendChild(li);
+            }
+          });
+        });
+      }
+
+      socket.on('friendListUpdated', updateUserList);
+
+      updateUserList();
     });
-
-    // Fetch and display last seen
-socket.emit('getLastSeen', chatWith);
-
-socket.on('lastSeen', ({ username, lastSeen }) => {
-  if (username === chatWith) {
-    currentChatStatus.textContent = lastSeen;
-  }
-});
-
-
-li.querySelector('.start-chat-btn').addEventListener('click', () => {
-  chatWith = username;
-  currentChatName.textContent = username;
-  currentRoom = `${user.username}-${username}`;
-  socket.emit('joinRoom', { room: currentRoom, username });
-  socket.emit('getLastSeen', username);
-});
-
-
-socket.on('receiveMessage', (data) => {
-  if (data.room === currentRoom) {
-    const messageElem = document.createElement('div');
-    messageElem.className = data.sender === user.username ? 'chat-bubble user' : 'chat-bubble other';
-    messageElem.innerHTML = `
-      <p><strong>${data.sender}:</strong> ${data.message}</p>
-      <small>${new Date(data.timestamp).toLocaleString()}</small>
-    `;
-    chatBox.appendChild(messageElem);
-    chatBox.scrollTop = chatBox.scrollHeight;
-  }
-});
-
   </script>
 </body>
 </html>
