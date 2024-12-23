@@ -11,9 +11,8 @@ const users = [];
 const friendRequests = {};
 const friends = {};
 const activeUsers = {};
-const messages = {}; // Store messages for offline users
+const messages = {};
 
-// User Registration
 app.post('/api/signup', (req, res) => {
   const { email, password, username, phone } = req.body;
 
@@ -30,7 +29,6 @@ app.post('/api/signup', (req, res) => {
   res.status(201).json({ message: 'User registered successfully' });
 });
 
-// User Login
 app.post('/api/login', (req, res) => {
   const { loginContact, loginPassword } = req.body;
   const user = users.find(
@@ -47,7 +45,6 @@ app.post('/api/login', (req, res) => {
   res.json({ user });
 });
 
-// Setting up Socket.io
 const server = http.createServer(app);
 const io = new Server(server, { cors: { origin: '*' } });
 
@@ -58,7 +55,6 @@ io.on('connection', (socket) => {
     activeUsers[username] = { socketId: socket.id, lastSeen: 'Online' };
     console.log(`${username} connected.`);
 
-    // Send any stored messages to the user
     if (messages[username]) {
       messages[username].forEach((message) => {
         io.to(socket.id).emit(`receiveMessage-${message.room}`, message);
@@ -76,7 +72,6 @@ io.on('connection', (socket) => {
     const [user1, user2] = room.split('-');
     const receiver = user1 === sender ? user2 : user1;
 
-    // Store the message if the receiver is offline
     if (!activeUsers[receiver]) {
       if (!messages[receiver]) {
         messages[receiver] = [];
@@ -84,9 +79,13 @@ io.on('connection', (socket) => {
       messages[receiver].push(data);
     }
 
-    io.to(data.room).emit(`receiveMessage-${data.room}`, data);
+    if (!messages[room]) {
+      messages[room] = [];
+    }
+    messages[room].push(data);
 
-    // Notify the receiver if they are online
+    io.to(room).emit(`receiveMessage-${room}`, data);
+
     const receiverSocketId = activeUsers[receiver]?.socketId;
     if (receiverSocketId) {
       io.to(receiverSocketId).emit('messageNotification', { from: sender });
@@ -108,8 +107,7 @@ io.on('connection', (socket) => {
     if (!friends[from]) {
       friends[from] = [];
     }
-    
-    // Check if the request already exists
+
     if (!friendRequests[to].includes(from) && !friends[from].includes(to) && !friends[to].includes(from)) {
       friendRequests[to].push(from);
       const toSocketId = activeUsers[to]?.socketId;
@@ -196,6 +194,10 @@ io.on('connection', (socket) => {
     const user = activeUsers[username];
     const lastSeen = user ? 'Online' : user?.lastSeen || 'Offline';
     socket.emit('lastSeen', { username, lastSeen });
+  });
+
+  socket.on('getChatHistory', (room, callback) => {
+    callback(messages[room] || []);
   });
 });
 

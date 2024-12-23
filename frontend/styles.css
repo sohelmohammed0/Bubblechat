@@ -211,6 +211,7 @@ body {
   justify-content: space-between;
   align-items: center;
   cursor: pointer;
+  position: relative;
 }
 
 .chat-list li.online, .friend-requests li.online {
@@ -250,10 +251,26 @@ body {
 
 .message-btn {
   background-color: #8e44ad;
+  position: relative;
 }
 
 .unfriend-btn {
   background-color: #c0392b;
+}
+
+.notification-dot {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 10px;
+  height: 10px;
+  background-color: red;
+  border-radius: 50%;
+  display: none;
+}
+
+.notification-dot.visible {
+  display: block;
 }
 
 /* Chat Section Styles */
@@ -303,6 +320,14 @@ body {
   background: #ecf0f1;
 }
 
+.date-separator {
+  text-align: center;
+  margin: 10px 0;
+  font-size: 1.2em;
+  color: #2c3e50;
+  font-weight: bold;
+}
+
 .chat-bubble {
   max-width: 60%;
   padding: 10px;
@@ -320,6 +345,18 @@ body {
 .chat-bubble.other {
   background: #bdc3c7;
   color: #2c3e50;
+}
+
+.chat-bubble p {
+  margin: 0;
+}
+
+.chat-bubble .timestamp {
+  display: block;
+  font-size: 0.8em;
+  color: #7f8c8d;
+  margin-top: 5px;
+  text-align: right;
 }
 
 .chat-footer {
@@ -430,17 +467,3 @@ body {
   display: none;
 }
 
-.notification-dot {
-  position: absolute;
-  top: -5px;
-  right: -5px;
-  width: 10px;
-  height: 10px;
-  background-color: red;
-  border-radius: 50%;
-  display: none;
-}
-
-.notification-dot.hidden {
-  display: none;
-}

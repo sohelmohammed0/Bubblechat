@@ -7,7 +7,6 @@
   <link rel="stylesheet" href="styles.css">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
   <style>
-    /* Add this CSS for the notification dot */
     .new-message::after {
       content: '';
       position: absolute;
@@ -22,7 +21,6 @@
 </head>
 <body>
   <div class="container">
-    <!-- Sidebar -->
     <aside class="sidebar">
       <header class="sidebar-header">
         <h2>Bubble Chat</h2>
@@ -37,7 +35,6 @@
     </aside>
   </div>
 
-  <!-- Chat Popup Template -->
   <div id="chat-popup-template" class="chat-popup hidden">
     <header class="chat-popup-header">
       <span class="chat-popup-name"></span>
@@ -91,6 +88,8 @@
                 li.querySelector('.add-btn').addEventListener('click', () => {
                   socket.emit('sendFriendRequest', { from: user.username, to: username });
                 });
+              } else {
+                li.innerHTML += `<button class="message-btn" data-friend="${username}">Message</button>`;
               }
               userList.appendChild(li);
             }
@@ -135,10 +134,10 @@
       });
 
       function openChatPopup(friendName) {
-        // Check if the chat popup for this friend already exists
         let existingPopup = document.querySelector(`.chat-popup[data-friend="${friendName}"]`);
         if (existingPopup) {
-          return; // If it exists, do nothing
+          existingPopup.classList.add('new-message');
+          return;
         }
 
         const chatPopupTemplate = document.getElementById('chat-popup-template');
@@ -155,7 +154,6 @@
 
         const room = [user.username, friendName].sort().join('-');
 
-        // Join the room
         socket.emit('joinRoom', room);
 
         closePopupBtn.addEventListener('click', () => {
@@ -173,42 +171,32 @@
               sender: user.username,
               timestamp
             });
-            popupMessageInput.value = ''; // Clear the input field
+            popupMessageInput.value = '';
           }
         }
 
         popupSendBtn.addEventListener('click', sendMessage);
 
-        // Use a unique event listener for each chat popup
         socket.off(`receiveMessage-${room}`);
         socket.on(`receiveMessage-${room}`, (data) => {
-          if (data.room === room) {
-            appendMessage(popupChatBox, data);
-            const messageBtn = document.querySelector(`.message-btn[data-friend="${friendName}"]`);
-            if (messageBtn) {
-              messageBtn.classList.remove('new-message');
-            }
+          appendMessage(popupChatBox, data);
+          const messageBtn = document.querySelector(`.message-btn[data-friend="${friendName}"]`);
+          if (messageBtn) {
+            messageBtn.classList.remove('new-message');
           }
         });
 
         document.body.appendChild(chatPopup);
+
+        socket.emit('getChatHistory', room, (messages) => {
+          messages.forEach((message) => appendMessage(popupChatBox, message));
+        });
       }
 
       function appendMessage(chatBox, data) {
         const messageElem = document.createElement('div');
         messageElem.className = data.sender === user.username ? 'chat-bubble user' : 'chat-bubble other';
-        messageElem.innerHTML = `<p><strong>${data.sender}</strong>: ${data.message}</p>`;
-
-        // Append date if it's a new day
-        const lastMessage = chatBox.lastElementChild;
-        const lastMessageDate = lastMessage ? new Date(lastMessage.querySelector('p strong').dataset.timestamp).toDateString() : null;
-        const currentMessageDate = new Date(data.timestamp).toDateString();
-        if (lastMessageDate !== currentMessageDate) {
-          const dateElem = document.createElement('div');
-          dateElem.className = 'date-separator';
-          dateElem.textContent = formatDate(data.timestamp);
-          chatBox.appendChild(dateElem);
-        }
+        messageElem.innerHTML = `<p><strong>${data.sender}</strong>: ${data.message}</p><span class="timestamp">${formatTimestamp(data.timestamp)}</span>`;
 
         chatBox.appendChild(messageElem);
         chatBox.scrollTop = chatBox.scrollHeight;
@@ -239,6 +227,7 @@
               `;
               li.className = status === 'online' ? 'online' : 'offline';
               li.querySelector('.message-btn').addEventListener('click', () => {
+                li.querySelector('.message-btn').classList.remove('new-message');
                 openChatPopup(username);
               });
               li.querySelector('.unfriend-btn').addEventListener('click', () => {
