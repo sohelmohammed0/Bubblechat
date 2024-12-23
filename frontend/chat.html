@@ -17,6 +17,53 @@
       background: red;
       border-radius: 50%;
     }
+
+    .chat-date {
+      text-align: right;
+      padding: 8px 15px;
+      color: #666;
+      font-size: 0.9em;
+      background-color: #f5f5f5;
+      border-bottom: 1px solid #ddd;
+      position: sticky;
+      top: 0;
+      z-index: 1;
+    }
+
+    .chat-popup-box {
+      position: relative;
+      height: 300px;
+      overflow-y: auto;
+      padding: 10px;
+      background: #f5f5f5;
+    }
+
+    .chat-bubble {
+      margin: 8px 0;
+      padding: 10px;
+      border-radius: 15px;
+      max-width: 80%;
+      word-wrap: break-word;
+    }
+
+    .chat-bubble.user {
+      background-color: #538ecd;
+      color: white;
+      margin-left: auto;
+    }
+
+    .chat-bubble.other {
+      background-color: #e9ecef;
+      color: black;
+      margin-right: auto;
+    }
+
+    .timestamp {
+      font-size: 0.75em;
+      opacity: 0.7;
+      margin-top: 5px;
+      display: block;
+    }
   </style>
 </head>
 <body>
@@ -40,6 +87,7 @@
       <span class="chat-popup-name"></span>
       <button class="close-popup-btn"><i class="fas fa-times"></i></button>
     </header>
+    <div class="chat-date"></div>
     <div class="chat-popup-box"></div>
     <div class="chat-popup-footer">
       <input type="text" class="popup-message" placeholder="Type a message...">
@@ -64,6 +112,37 @@
       const userList = document.getElementById('user-list');
       const friendRequestsList = document.getElementById('friend-requests');
 
+      function formatDate(timestamp) {
+        const date = new Date(timestamp);
+        const day = date.getDate();
+        const month = date.toLocaleString('default', { month: 'short' });
+        const year = date.getFullYear();
+        return `${day} ${month} ${year}`;
+      }
+
+      function formatTimestamp(timestamp) {
+        const date = new Date(timestamp);
+        const options = { hour: '2-digit', minute: '2-digit' };
+        return date.toLocaleTimeString('en-GB', options);
+      }
+
+      function updateChatDate(chatPopup) {
+        const dateDiv = chatPopup.querySelector('.chat-date');
+        const today = new Date();
+        dateDiv.textContent = formatDate(today);
+      }
+
+      function appendMessage(chatBox, data) {
+        const messageElem = document.createElement('div');
+        messageElem.className = data.sender === user.username ? 'chat-bubble user' : 'chat-bubble other';
+        messageElem.innerHTML = `
+          <p><strong>${data.sender}</strong>: ${data.message}</p>
+          <span class="timestamp">${formatTimestamp(data.timestamp)}</span>
+        `;
+        chatBox.appendChild(messageElem);
+        chatBox.scrollTop = chatBox.scrollHeight;
+      }
+
       socket.emit('userConnected', user.username);
 
       searchInput.addEventListener('input', () => {
@@ -75,68 +154,10 @@
         }
       });
 
-      socket.on('searchResults', (results) => {
-        userList.innerHTML = '';
-        if (results.length > 0) {
-          results.forEach(({ username, status, isFriend }) => {
-            if (username !== user.username) {
-              const li = document.createElement('li');
-              li.innerHTML = `<span>${username}</span>`;
-              li.className = status === 'online' ? 'online' : 'offline';
-              if (!isFriend) {
-                li.innerHTML += `<button class="add-btn">Add</button>`;
-                li.querySelector('.add-btn').addEventListener('click', () => {
-                  socket.emit('sendFriendRequest', { from: user.username, to: username });
-                });
-              } else {
-                li.innerHTML += `<button class="message-btn" data-friend="${username}">Message</button>`;
-              }
-              userList.appendChild(li);
-            }
-          });
-        } else {
-          const noUsers = document.createElement('li');
-          noUsers.innerHTML = 'No users found';
-          noUsers.className = 'no-users';
-          userList.appendChild(noUsers);
-        }
-      });
-
-      logoutBtn.addEventListener('click', () => {
-        sessionStorage.removeItem('user');
-        socket.emit('userDisconnected', user.username);
-        window.location.href = 'login.html';
-      });
-
-      socket.on('friendRequestReceived', ({ from }) => {
-        const li = document.createElement('li');
-        li.innerHTML = `
-          <span>${from}</span>
-          <button class="accept-btn">Accept</button>
-        `;
-        li.querySelector('.accept-btn').addEventListener('click', () => {
-          socket.emit('acceptFriendRequest', { from, to: user.username });
-          friendRequestsList.removeChild(li);
-        });
-        friendRequestsList.appendChild(li);
-      });
-
-      socket.on('friendRequestAccepted', ({ from }) => {
-        alert(`You are now friends with ${from}`);
-        updateUserList();
-      });
-
-      socket.on('messageNotification', ({ from }) => {
-        const messageBtn = document.querySelector(`.message-btn[data-friend="${from}"]`);
-        if (messageBtn) {
-          messageBtn.classList.add('new-message');
-        }
-      });
-
       function openChatPopup(friendName) {
         let existingPopup = document.querySelector(`.chat-popup[data-friend="${friendName}"]`);
         if (existingPopup) {
-          existingPopup.classList.add('new-message');
+          existingPopup.classList.remove('hidden');
           return;
         }
 
@@ -146,6 +167,17 @@
         chatPopup.classList.remove('hidden');
         chatPopup.setAttribute('data-friend', friendName);
         chatPopup.querySelector('.chat-popup-name').textContent = friendName;
+
+        // Initialize the date
+        updateChatDate(chatPopup);
+
+        // Set up automatic date update at midnight
+        const dateUpdateInterval = setInterval(() => {
+          const now = new Date();
+          if (now.getHours() === 0 && now.getMinutes() === 0 && now.getSeconds() === 0) {
+            updateChatDate(chatPopup);
+          }
+        }, 1000);
 
         const popupSendBtn = chatPopup.querySelector('.popup-send-btn');
         const popupMessageInput = chatPopup.querySelector('.popup-message');
@@ -157,8 +189,15 @@
         socket.emit('joinRoom', room);
 
         closePopupBtn.addEventListener('click', () => {
+          clearInterval(dateUpdateInterval);
           document.body.removeChild(chatPopup);
           socket.emit('leaveRoom', room);
+        });
+
+        popupMessageInput.addEventListener('keypress', (e) => {
+          if (e.key === 'Enter') {
+            sendMessage();
+          }
         });
 
         function sendMessage() {
@@ -189,30 +228,38 @@
         document.body.appendChild(chatPopup);
 
         socket.emit('getChatHistory', room, (messages) => {
+          messages.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+          popupChatBox.innerHTML = '';
           messages.forEach((message) => appendMessage(popupChatBox, message));
         });
       }
 
-      function appendMessage(chatBox, data) {
-        const messageElem = document.createElement('div');
-        messageElem.className = data.sender === user.username ? 'chat-bubble user' : 'chat-bubble other';
-        messageElem.innerHTML = `<p><strong>${data.sender}</strong>: ${data.message}</p><span class="timestamp">${formatTimestamp(data.timestamp)}</span>`;
-
-        chatBox.appendChild(messageElem);
-        chatBox.scrollTop = chatBox.scrollHeight;
-      }
-
-      function formatTimestamp(timestamp) {
-        const date = new Date(timestamp);
-        const options = { hour: '2-digit', minute: '2-digit' };
-        return date.toLocaleTimeString('en-GB', options);
-      }
-
-      function formatDate(timestamp) {
-        const date = new Date(timestamp);
-        const options = { day: '2-digit', month: 'short', year: 'numeric' };
-        return date.toLocaleDateString('en-GB', options);
-      }
+      socket.on('searchResults', (results) => {
+        userList.innerHTML = '';
+        if (results.length > 0) {
+          results.forEach(({ username, status, isFriend }) => {
+            if (username !== user.username) {
+              const li = document.createElement('li');
+              li.innerHTML = `<span>${username}</span>`;
+              li.className = status === 'online' ? 'online' : 'offline';
+              if (!isFriend) {
+                li.innerHTML += `<button class="add-btn">Add</button>`;
+                li.querySelector('.add-btn').addEventListener('click', () => {
+                  socket.emit('sendFriendRequest', { from: user.username, to: username });
+                });
+              } else {
+                li.innerHTML += `<button class="message-btn" data-friend="${username}">Message</button>`;
+              }
+              userList.appendChild(li);
+            }
+          });
+        } else {
+          const noUsers = document.createElement('li');
+          noUsers.innerHTML = 'No users found';
+          noUsers.className = 'no-users';
+          userList.appendChild(noUsers);
+        }
+      });
 
       function updateUserList() {
         socket.emit('getUserFriends', { username: user.username }, (friends) => {
@@ -239,7 +286,37 @@
         });
       }
 
+      logoutBtn.addEventListener('click', () => {
+        sessionStorage.removeItem('user');
+        socket.emit('userDisconnected', user.username);
+        window.location.href = 'login.html';
+      });
+
+      socket.on('friendRequestReceived', ({ from }) => {
+        const li = document.createElement('li');
+        li.innerHTML = `
+          <span>${from}</span>
+          <button class="accept-btn">Accept</button>
+        `;
+        li.querySelector('.accept-btn').addEventListener('click', () => {
+          socket.emit('acceptFriendRequest', { from, to: user.username });
+          friendRequestsList.removeChild(li);
+        });
+        friendRequestsList.appendChild(li);
+      });
+
+      socket.on('friendRequestAccepted', ({ from }) => {
+        alert(`You are now friends with ${from}`);
+        updateUserList();
+      });
+
       socket.on('friendListUpdated', updateUserList);
+      socket.on('messageNotification', ({ from }) => {
+        const messageBtn = document.querySelector(`.message-btn[data-friend="${from}"]`);
+        if (messageBtn) {
+          messageBtn.classList.add('new-message');
+        }
+      });
 
       updateUserList();
     });

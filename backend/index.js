@@ -13,6 +13,12 @@ const friends = {};
 const activeUsers = {};
 const messages = {};
 
+// Helper function to format date
+function formatDate() {
+  const date = new Date();
+  return date.toISOString();
+}
+
 app.post('/api/signup', (req, res) => {
   const { email, password, username, phone } = req.body;
 
@@ -52,13 +58,16 @@ io.on('connection', (socket) => {
   console.log('A user connected.');
 
   socket.on('userConnected', (username) => {
-    activeUsers[username] = { socketId: socket.id, lastSeen: 'Online' };
+    activeUsers[username] = {
+      socketId: socket.id,
+      status: 'online',
+      lastSeen: formatDate()
+    };
     console.log(`${username} connected.`);
 
+    // Send any pending messages
     if (messages[username]) {
-      messages[username].forEach((message) => {
-        io.to(socket.id).emit(`receiveMessage-${message.room}`, message);
-      });
+      io.to(socket.id).emit('pendingMessages', messages[username]);
       delete messages[username];
     }
   });
@@ -68,36 +77,45 @@ io.on('connection', (socket) => {
   });
 
   socket.on('sendMessage', (data) => {
-    const { room, message, sender, timestamp } = data;
+    const messageData = {
+      ...data,
+      timestamp: formatDate()
+    };
+    
+    const { room, message, sender } = messageData;
     const [user1, user2] = room.split('-');
     const receiver = user1 === sender ? user2 : user1;
 
+    // Store message
+    if (!messages[room]) {
+      messages[room] = [];
+    }
+    messages[room].push(messageData);
+
+    // Send to room
+    io.to(room).emit(`receiveMessage-${room}`, messageData);
+
+    // Handle offline user messages
     if (!activeUsers[receiver]) {
       if (!messages[receiver]) {
         messages[receiver] = [];
       }
-      messages[receiver].push(data);
-    }
-
-    if (!messages[room]) {
-      messages[room] = [];
-    }
-    messages[room].push(data);
-
-    io.to(room).emit(`receiveMessage-${room}`, data);
-
-    const receiverSocketId = activeUsers[receiver]?.socketId;
-    if (receiverSocketId) {
-      io.to(receiverSocketId).emit('messageNotification', { from: sender });
+      messages[receiver].push(messageData);
+    } else {
+      // Send notification to online user
+      const receiverSocketId = activeUsers[receiver].socketId;
+      if (receiverSocketId) {
+        io.to(receiverSocketId).emit('messageNotification', { from: sender });
+      }
     }
   });
 
-  socket.on('sendFile', (data) => {
-    io.to(data.room).emit('receiveFile', data);
+  socket.on('getChatHistory', (room, callback) => {
+    const roomMessages = messages[room] || [];
+    callback(roomMessages);
   });
 
   socket.on('sendFriendRequest', ({ from, to }) => {
-    console.log(`Friend request from ${from} to ${to}`);
     if (!friendRequests[to]) {
       friendRequests[to] = [];
     }
@@ -112,7 +130,6 @@ io.on('connection', (socket) => {
       friendRequests[to].push(from);
       const toSocketId = activeUsers[to]?.socketId;
       if (toSocketId) {
-        console.log(`Notifying ${to} about the friend request from ${from}`);
         io.to(toSocketId).emit('friendRequestReceived', { from });
       }
     }
@@ -131,14 +148,14 @@ io.on('connection', (socket) => {
 
     const fromSocketId = activeUsers[from]?.socketId;
     const toSocketId = activeUsers[to]?.socketId;
+    
     if (fromSocketId) {
       io.to(fromSocketId).emit('friendRequestAccepted', { from: to });
+      io.to(fromSocketId).emit('friendListUpdated');
     }
     if (toSocketId) {
-      io.to(toSocketId).emit('friendRequestAccepted', { from });
+      io.to(toSocketId).emit('friendListUpdated');
     }
-    io.to(fromSocketId).emit('friendListUpdated');
-    io.to(toSocketId).emit('friendListUpdated');
   });
 
   socket.on('unfriend', ({ from, to }) => {
@@ -159,25 +176,14 @@ io.on('connection', (socket) => {
     }
   });
 
-  socket.on('disconnect', () => {
-    const disconnectedUser = Object.keys(activeUsers).find(
-      (user) => activeUsers[user].socketId === socket.id
-    );
-
-    if (disconnectedUser) {
-      activeUsers[disconnectedUser].lastSeen = new Date().toLocaleString();
-      console.log(`${disconnectedUser} disconnected.`);
-    }
-  });
-
   socket.on('searchUsers', (query) => {
-    const results = users.filter(user => user.username.includes(query))
+    const results = users
+      .filter(user => user.username.toLowerCase().includes(query.toLowerCase()))
       .map(user => ({
         username: user.username,
-        status: user.status,
+        status: activeUsers[user.username]?.status || 'offline',
         isFriend: (friends[query] || []).includes(user.username)
       }));
-
     socket.emit('searchResults', results);
   });
 
@@ -185,19 +191,34 @@ io.on('connection', (socket) => {
     const userFriends = friends[username] || [];
     const friendDetails = userFriends.map(friend => {
       const user = users.find(u => u.username === friend);
-      return { username: friend, status: user.status };
+      return {
+        username: friend,
+        status: activeUsers[friend]?.status || 'offline'
+      };
     });
     callback(friendDetails);
   });
 
-  socket.on('getLastSeen', (username) => {
-    const user = activeUsers[username];
-    const lastSeen = user ? 'Online' : user?.lastSeen || 'Offline';
-    socket.emit('lastSeen', { username, lastSeen });
-  });
+  socket.on('disconnect', () => {
+    const disconnectedUser = Object.keys(activeUsers).find(
+      (user) => activeUsers[user].socketId === socket.id
+    );
 
-  socket.on('getChatHistory', (room, callback) => {
-    callback(messages[room] || []);
+    if (disconnectedUser) {
+      activeUsers[disconnectedUser].status = 'offline';
+      activeUsers[disconnectedUser].lastSeen = formatDate();
+      console.log(`${disconnectedUser} disconnected.`);
+      
+      // Notify friends about status change
+      if (friends[disconnectedUser]) {
+        friends[disconnectedUser].forEach(friend => {
+          const friendSocketId = activeUsers[friend]?.socketId;
+          if (friendSocketId) {
+            io.to(friendSocketId).emit('friendListUpdated');
+          }
+        });
+      }
+    }
   });
 });
 
