@@ -11,6 +11,7 @@ const users = [];
 const friendRequests = {};
 const friends = {};
 const activeUsers = {};
+const messages = {}; // Store messages for offline users
 
 // User Registration
 app.post('/api/signup', (req, res) => {
@@ -56,6 +57,14 @@ io.on('connection', (socket) => {
   socket.on('userConnected', (username) => {
     activeUsers[username] = { socketId: socket.id, lastSeen: 'Online' };
     console.log(`${username} connected.`);
+
+    // Send any stored messages to the user
+    if (messages[username]) {
+      messages[username].forEach((message) => {
+        io.to(socket.id).emit(`receiveMessage-${message.room}`, message);
+      });
+      delete messages[username];
+    }
   });
 
   socket.on('joinRoom', (room) => {
@@ -63,7 +72,25 @@ io.on('connection', (socket) => {
   });
 
   socket.on('sendMessage', (data) => {
+    const { room, message, sender, timestamp } = data;
+    const [user1, user2] = room.split('-');
+    const receiver = user1 === sender ? user2 : user1;
+
+    // Store the message if the receiver is offline
+    if (!activeUsers[receiver]) {
+      if (!messages[receiver]) {
+        messages[receiver] = [];
+      }
+      messages[receiver].push(data);
+    }
+
     io.to(data.room).emit(`receiveMessage-${data.room}`, data);
+
+    // Notify the receiver if they are online
+    const receiverSocketId = activeUsers[receiver]?.socketId;
+    if (receiverSocketId) {
+      io.to(receiverSocketId).emit('messageNotification', { from: sender });
+    }
   });
 
   socket.on('sendFile', (data) => {
@@ -147,7 +174,11 @@ io.on('connection', (socket) => {
 
   socket.on('searchUsers', (query) => {
     const results = users.filter(user => user.username.includes(query))
-      .map(user => ({ username: user.username, status: user.status }));
+      .map(user => ({
+        username: user.username,
+        status: user.status,
+        isFriend: (friends[query] || []).includes(user.username)
+      }));
 
     socket.emit('searchResults', results);
   });

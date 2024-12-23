@@ -6,6 +6,19 @@
   <title>Bubble Chat</title>
   <link rel="stylesheet" href="styles.css">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+  <style>
+    /* Add this CSS for the notification dot */
+    .new-message::after {
+      content: '';
+      position: absolute;
+      top: 0;
+      right: 0;
+      width: 10px;
+      height: 10px;
+      background: red;
+      border-radius: 50%;
+    }
+  </style>
 </head>
 <body>
   <div class="container">
@@ -68,17 +81,17 @@
       socket.on('searchResults', (results) => {
         userList.innerHTML = '';
         if (results.length > 0) {
-          results.forEach(({ username, status }) => {
+          results.forEach(({ username, status, isFriend }) => {
             if (username !== user.username) {
               const li = document.createElement('li');
-              li.innerHTML = `
-                <span>${username}</span>
-                <button class="add-btn">Add</button>
-              `;
+              li.innerHTML = `<span>${username}</span>`;
               li.className = status === 'online' ? 'online' : 'offline';
-              li.querySelector('.add-btn').addEventListener('click', () => {
-                socket.emit('sendFriendRequest', { from: user.username, to: username });
-              });
+              if (!isFriend) {
+                li.innerHTML += `<button class="add-btn">Add</button>`;
+                li.querySelector('.add-btn').addEventListener('click', () => {
+                  socket.emit('sendFriendRequest', { from: user.username, to: username });
+                });
+              }
               userList.appendChild(li);
             }
           });
@@ -112,6 +125,13 @@
       socket.on('friendRequestAccepted', ({ from }) => {
         alert(`You are now friends with ${from}`);
         updateUserList();
+      });
+
+      socket.on('messageNotification', ({ from }) => {
+        const messageBtn = document.querySelector(`.message-btn[data-friend="${from}"]`);
+        if (messageBtn) {
+          messageBtn.classList.add('new-message');
+        }
       });
 
       function openChatPopup(friendName) {
@@ -164,6 +184,10 @@
         socket.on(`receiveMessage-${room}`, (data) => {
           if (data.room === room) {
             appendMessage(popupChatBox, data);
+            const messageBtn = document.querySelector(`.message-btn[data-friend="${friendName}"]`);
+            if (messageBtn) {
+              messageBtn.classList.remove('new-message');
+            }
           }
         });
 
@@ -210,7 +234,7 @@
               const li = document.createElement('li');
               li.innerHTML = `
                 <span>${username}</span>
-                <button class="message-btn">Message</button>
+                <button class="message-btn" data-friend="${username}">Message</button>
                 <button class="unfriend-btn">Unfriend</button>
               `;
               li.className = status === 'online' ? 'online' : 'offline';
