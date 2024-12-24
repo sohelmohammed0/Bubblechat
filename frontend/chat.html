@@ -332,19 +332,13 @@
                 friendsDot.classList.add('hidden');  // Hide notification dot when checking messages
               });
               li.querySelector('.unfriend-btn').addEventListener('click', () => {
-                socket.emit('unfriend', { from: username, to: username });
+                socket.emit('unfriend', { from: user.username, to: username });
               });
               userList.appendChild(li);
             }
           });
         });
       }
-
-      logoutBtn.addEventListener('click', () => {
-        sessionStorage.removeItem('user');
-        socket.emit('userDisconnected', username);
-        window.location.href = 'login.html';
-      });
 
       socket.on('friendRequestReceived', ({ from }) => {
         const li = document.createElement('li');

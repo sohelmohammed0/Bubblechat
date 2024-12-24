@@ -265,6 +265,8 @@ io.on('connection', (socket) => {
 
         const fromSocketId = activeUsers[from]?.socketId;
         const toSocketId = activeUsers[to]?.socketId;
+        
+        // Emit the friendListUpdated event to both users
         if (fromSocketId) {
             io.to(fromSocketId).emit('friendListUpdated');
         }
