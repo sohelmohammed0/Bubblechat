@@ -151,27 +151,40 @@ body {
   box-shadow: 0 0 8px rgba(231, 76, 60, 0.5);
 }
 
-/* Chat popup styles */
+/* Ensure the chat popup window has a fixed size */
 .chat-popup {
-  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
-  transition: all 0.3s ease;
+  width: 400px;
+  height: 500px;
 }
 
-.chat-popup.minimized {
-  height: 60px !important;
-  overflow: hidden;
-}
-
-.chat-popup-header {
-  background: var(--primary-gradient);
-}
-
+/* Ensure the chat popup box has a scroll bar for older chats */
 .chat-popup-box {
-  padding: 20px;
-  background: #f8f9fa;
+  max-height: calc(100% - 120px); /* Adjust based on header and footer sizes */
   overflow-y: auto;
-  flex-grow: 1;
-  max-height: calc(100% - 120px);
+}
+
+/* Ensure the chat-popup-footer is always at the bottom */
+.chat-popup-footer {
+  position: sticky;
+  bottom: 0;
+}
+
+/* Additional styling for the chat-popup-box to enhance the scrolling experience */
+.chat-popup-box::-webkit-scrollbar {
+  width: 8px;
+}
+
+.chat-popup-box::-webkit-scrollbar-track {
+  background: #f1f1f1;
+}
+
+.chat-popup-box::-webkit-scrollbar-thumb {
+  background: #888;
+  border-radius: 8px;
+}
+
+.chat-popup-box::-webkit-scrollbar-thumb:hover {
+  background: #555;
 }
 
 /* Chat bubbles */

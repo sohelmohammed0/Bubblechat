@@ -19,6 +19,13 @@
       border-radius: 50%;
       box-shadow: 0 0 8px rgba(231, 76, 60, 0.5);
     }
+    .chat-popup {
+      width: 24rem; /* Fixed width */
+      height: 32rem; /* Fixed height */
+    }
+    .chat-popup-box {
+      overflow-y: auto; /* Make the chat box scrollable */
+    }
   </style>
 </head>
 <body class="bg-gradient-to-r from-blue-500 to-purple-600 font-sans">
@@ -82,7 +89,7 @@
   </div>
 
   <!-- Chat Popup Template -->
-  <div id="chat-popup-template" class="chat-popup hidden fixed bottom-4 right-4 w-96 h-[32rem] bg-white shadow-2xl rounded-lg flex flex-col overflow-hidden animate__animated animate__fadeInUp">
+  <div id="chat-popup-template" class="chat-popup hidden fixed bottom-4 right-4 bg-white shadow-2xl rounded-lg flex flex-col overflow-hidden animate__animated animate__fadeInUp">
     <header class="chat-popup-header bg-gradient-to-r from-blue-600 to-purple-600 text-white p-4 flex justify-between items-center">
       <div class="flex items-center">
         <div class="status-indicator mr-2"></div>
