@@ -2,8 +2,12 @@ const express = require('express');
 const cors = require('cors');
 const http = require('http');
 const { Server } = require('socket.io');
+const client = require('prom-client');
+
 
 const app = express();
+const register = new client.Registry();
+
 
 // Configure CORS with specific options
 app.use(cors({
@@ -334,6 +338,43 @@ io.on('connection', (socket) => {
         }
     });
 });
+
+// Collect default metrics (CPU, Memory, etc.)
+client.collectDefaultMetrics({ register });
+
+// Custom application metric example
+const httpRequestDuration = new client.Histogram({
+  name: 'http_request_duration_seconds',
+  help: 'Duration of HTTP requests in seconds',
+  labelNames: ['method', 'route', 'status_code'],
+});
+
+register.registerMetric(httpRequestDuration);
+
+// Middleware to track response time
+app.use((req, res, next) => {
+  const end = httpRequestDuration.startTimer();
+  res.on('finish', () => {
+    end({ method: req.method, route: req.url, status_code: res.statusCode });
+  });
+  next();
+});
+
+// Metrics endpoint
+app.get('/metrics', async (req, res) => {
+  res.set('Content-Type', register.contentType);
+  res.end(await register.metrics());
+});
+
+// Sample route
+app.get('/', (req, res) => {
+  res.send('Hello, World!');
+});
+
+app.listen(3000, () => {
+  console.log('App running on http://localhost:3000');
+});
+
 
 server.listen(5000, () => {
     console.log('Server is running on port 5000');

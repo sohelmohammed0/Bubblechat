@@ -8,6 +8,8 @@ services:
       - "5000:5000"
     volumes:
       - ./backend:/usr/src/app
+    networks:
+      - monitoring
     depends_on:
       - frontend
 
@@ -16,3 +18,29 @@ services:
       context: ./frontend
     ports:
       - "3000:80"
+    networks:
+      - monitoring
+
+  prometheus:
+    image: prom/prometheus
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+    ports:
+      - "9090:9090"
+    networks:
+      - monitoring
+
+  grafana:
+    image: grafana/grafana
+    ports:
+      - "3001:3000"
+    networks:
+      - monitoring
+    volumes:
+      - grafana-storage:/var/lib/grafana
+
+networks:
+  monitoring:
+
+volumes:
+  grafana-storage:
