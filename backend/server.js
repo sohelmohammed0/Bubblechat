@@ -19,10 +19,16 @@ const friends = {};
 const activeUsers = {};
 const messages = {};
 
+// Helper function to format date
 function formatDate() {
-    const date = new Date();
-    return date.toISOString();
+    return new Date().toISOString();
 }
+
+// Validation functions
+const validateEmail = email => /^[^\s@]+@gmail\.com$/.test(email);
+const validatePassword = password => /(?=.*[A-Z])(?=.*\d)(?=.*[@#$%^&+=]).{8,}/.test(password);
+const validatePhone = phone => /^\d{10}$/.test(phone);
+const validateUsername = username => username.length >= 3 && username.length <= 30;
 
 // Single signup route with improved error handling
 app.post('/api/signup', async (req, res) => {
@@ -33,42 +39,28 @@ app.post('/api/signup', async (req, res) => {
 
         // Validation checks
         if (!email || !password || !username || !phone) {
-            console.log('Missing required fields');
             return res.status(400).json({ error: 'All fields are required' });
         }
 
-        // Email format validation
-        const emailRegex = /^[^\s@]+@gmail\.com$/;
-        if (!emailRegex.test(email)) {
-            console.log('Invalid email format');
+        if (!validateEmail(email)) {
             return res.status(400).json({ error: 'Email must end with @gmail.com' });
         }
 
-        // Password validation
-        const passwordRegex = /(?=.*[A-Z])(?=.*\d)(?=.*[@#$%^&+=]).{8,}/;
-        if (!passwordRegex.test(password)) {
-            console.log('Invalid password format');
+        if (!validatePassword(password)) {
             return res.status(400).json({ error: 'Password must be at least 8 characters long and contain at least one uppercase letter, one number, and one special character' });
         }
 
-        // Phone number validation
-        const phoneRegex = /^\d{10}$/;
-        if (!phoneRegex.test(phone)) {
-            console.log('Invalid phone number');
+        if (!validatePhone(phone)) {
             return res.status(400).json({ error: 'Phone number must be 10 digits' });
         }
 
-        // Username validation
-        if (username.length < 3 || username.length > 30) {
-            console.log('Invalid username length');
+        if (!validateUsername(username)) {
             return res.status(400).json({ error: 'Username must be between 3 and 30 characters' });
         }
 
         // Check for existing user
         const existingUser = users.find(user =>
-            user.email === email ||
-            user.username === username ||
-            user.phone === phone
+            user.email === email || user.username === username || user.phone === phone
         );
 
         if (existingUser) {
@@ -80,7 +72,6 @@ app.post('/api/signup', async (req, res) => {
             } else if (existingUser.phone === phone) {
                 error = 'Phone number already registered';
             }
-            console.log('Existing user found:', error);
             return res.status(400).json({ error });
         }
 
@@ -126,7 +117,6 @@ app.post('/api/login', (req, res) => {
     );
 
     if (!user) {
-        console.log('Invalid login credentials');
         return res.status(401).json({ error: 'Invalid login credentials' });
     }
 
@@ -142,7 +132,6 @@ app.post('/api/logout', (req, res) => {
     const user = users.find(u => u.username === username);
 
     if (!user) {
-        console.log('User not found during logout');
         return res.status(404).json({ error: 'User not found' });
     }
 
@@ -226,15 +215,9 @@ io.on('connection', (socket) => {
         if (!friendRequests[to]) {
             friendRequests[to] = [];
         }
-        if (!friends[to]) {
-            friends[to] = [];
-        }
-        if (!friends[from]) {
-            friends[from] = [];
-        }
 
         // Check if a friend request is already sent or if they are already friends
-        if (!friendRequests[to].includes(from) && !friends[from].includes(to) && !friends[to].includes(from)) {
+        if (!friendRequests[to].includes(from) && !friends[to]?.includes(from) && !friends[from]?.includes(to)) {
             friendRequests[to].push(from);
             console.log(`Friend request sent from ${from} to ${to}`);
             const toSocketId = activeUsers[to]?.socketId;
@@ -247,12 +230,9 @@ io.on('connection', (socket) => {
     });
 
     socket.on('acceptFriendRequest', ({ from, to }) => {
-        if (!friends[to]) {
-            friends[to] = [];
-        }
-        if (!friends[from]) {
-            friends[from] = [];
-        }
+        friends[to] = friends[to] || [];
+        friends[from] = friends[from] || [];
+
         friends[to].push(from);
         friends[from].push(to);
         friendRequests[to] = friendRequests[to].filter(request => request !== from);
@@ -270,16 +250,12 @@ io.on('connection', (socket) => {
     });
 
     socket.on('unfriend', ({ from, to }) => {
-        if (friends[from]) {
-            friends[from] = friends[from].filter(friend => friend !== to);
-        }
-        if (friends[to]) {
-            friends[to] = friends[to].filter(friend => friend !== from);
-        }
+        friends[from] = friends[from]?.filter(friend => friend !== to) || [];
+        friends[to] = friends[to]?.filter(friend => friend !== from) || [];
 
         const fromSocketId = activeUsers[from]?.socketId;
         const toSocketId = activeUsers[to]?.socketId;
-        
+
         // Emit the friendListUpdated event to both users
         if (fromSocketId) {
             io.to(fromSocketId).emit('friendListUpdated');
@@ -334,6 +310,7 @@ io.on('connection', (socket) => {
         }
     });
 });
+
 
 server.listen(5000, () => {
     console.log('Server is running on port 5000');
