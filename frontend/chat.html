@@ -68,17 +68,34 @@
       margin: 5px 0;
       border-radius: 10px;
       max-width: 70%;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
     }
 
     .sent {
       background: #4e4376;
       color: white;
       align-self: flex-end;
+      margin-left: auto;
     }
 
     .received {
       background: #e0e0e0;
+      color: #000;
       align-self: flex-start;
+      margin-right: auto;
+    }
+
+    .message-content {
+      /* Add your existing styles for message content */
+    }
+
+    .timestamp {
+      font-size: 0.8rem;
+      color: #888;
+      margin-top: 4px;
+      align-self: flex-end;
     }
 
     .chat-input {
@@ -170,6 +187,7 @@
           <span id="requests-dot" class="notification-dot hidden"></span>
         </button>
       </div>
+      
 
       <div class="tab-content flex-grow">
         <ul class="chat-list flex-grow overflow-y-auto animate__animated animate__fadeIn" id="user-list"></ul>

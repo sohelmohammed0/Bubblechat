@@ -367,15 +367,45 @@ function formatDate(date) {
 
 function appendMessage(container, { sender, message, timestamp }) {
   const messageDiv = document.createElement('div');
-  messageDiv.className = 'chat-bubble';
-  messageDiv.classList.add(sender === JSON.parse(sessionStorage.getItem('user')).username ? 'user' : 'other');
+  messageDiv.className = 'message';
+  const currentUser = JSON.parse(sessionStorage.getItem('user')).username;
+  messageDiv.classList.add(sender === currentUser ? 'sent' : 'received');
   messageDiv.innerHTML = `
-    <div class="message-info">
-      <span class="message-sender">${sender}</span>
-      <span class="message-timestamp">${new Date(timestamp).toLocaleTimeString()}</span>
-    </div>
     <div class="message-text">${message}</div>
+    <small>${new Date(timestamp).toLocaleTimeString()}</small>
   `;
   container.appendChild(messageDiv);
   container.scrollTop = container.scrollHeight;
 }
+
+function showMessageNotificationDot() {
+  const messagesDot = document.getElementById('messages-dot');
+  if (messagesDot) {
+    messagesDot.classList.remove('hidden');
+  }
+}
+
+function hideMessageNotificationDot() {
+  const messagesDot = document.getElementById('messages-dot');
+  if (messagesDot) {
+    messagesDot.classList.add('hidden');
+  }
+}
+
+function receiveMessage(message) {
+  const chatMessages = document.querySelector('.chat-messages');
+  const newMessage = document.createElement('div');
+  newMessage.className = 'message received';
+  newMessage.textContent = message;
+  chatMessages.appendChild(newMessage);
+
+  chatMessages.scrollTop = chatMessages.scrollHeight;
+
+  showMessageNotificationDot();
+}
+
+document.querySelector('.tab-btn[data-tab="messages"]').addEventListener('click', hideMessageNotificationDot);
+
+setTimeout(() => {
+  receiveMessage('Hello! This is a new message.');
+}, 5000);
