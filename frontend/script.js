@@ -149,7 +149,10 @@ document.addEventListener('DOMContentLoaded', () => {
     socket.on(`receiveMessage-${room}`, (data) => {
       console.log('Message received:', data);
       appendMessage(popupChatBox, data);
-      friendsDot.classList.remove('hidden');  // Show notification dot for new message
+      const messageBtn = document.querySelector(`.message-btn[data-friend="${data.sender}"]`);
+      if (messageBtn) {
+        showMessageNotificationDot(messageBtn);
+      }
     });
 
     document.body.appendChild(chatPopup);
@@ -168,19 +171,19 @@ document.addEventListener('DOMContentLoaded', () => {
         if (username !== user.username) {
           const li = document.createElement('li');
           li.className = 'user-item flex justify-between items-center p-3 border-b border-gray-300';
-  
+
           const userInfo = document.createElement('div');
           userInfo.className = 'user-info flex items-center space-x-3';
           userInfo.innerHTML = `
             <span class="username">${username}</span>
             ${status === 'online' ? '<span class="status-dot bg-green-500"></span>' : '<span class="status-dot bg-gray-400"></span>'}
           `;
-  
+
           li.appendChild(userInfo);
-  
+
           const actions = document.createElement('div');
           actions.className = 'actions flex space-x-2';
-  
+
           if (!isFriend && !sentRequest) {
             const addButton = document.createElement('button');
             addButton.className = 'add-btn bg-blue-500 text-white px-3 py-1 rounded-lg hover:bg-blue-600 transition-colors duration-300';
@@ -191,33 +194,36 @@ document.addEventListener('DOMContentLoaded', () => {
               addButton.textContent = 'Request Sent';
               addButton.disabled = true;
             });
-  
+
             actions.appendChild(addButton);
           } else if (sentRequest) {
             const requestSentButton = document.createElement('button');
             requestSentButton.className = 'request-sent-btn bg-gray-500 text-white px-3 py-1 rounded-lg cursor-not-allowed';
             requestSentButton.textContent = 'Request Sent';
             requestSentButton.disabled = true;
-  
+
             actions.appendChild(requestSentButton);
           } else {
             const messageButton = document.createElement('button');
-            messageButton.className = 'message-btn bg-green-500 text-white px-3 py-1 rounded-lg hover:bg-green-600 transition-colors duration-300';
+            messageButton.className = 'message-btn bg-green-500 text-white px-3 py-1 rounded-lg hover:bg-green-600 transition-colors duration-300 relative';
             messageButton.textContent = 'Message';
             messageButton.setAttribute('data-friend', username);
-            messageButton.addEventListener('click', () => openChatPopup(username));
-  
+            messageButton.addEventListener('click', () => {
+              openChatPopup(username);
+              hideMessageNotificationDot(messageButton);
+            });
+
             const unfriendButton = document.createElement('button');
             unfriendButton.className = 'unfriend-btn bg-red-500 text-white px-3 py-1 rounded-lg hover:bg-red-600 transition-colors duration-300';
             unfriendButton.textContent = 'Unfriend';
             unfriendButton.addEventListener('click', () => {
               socket.emit('unfriend', { from: user.username, to: username });
             });
-  
+
             actions.appendChild(messageButton);
             actions.appendChild(unfriendButton);
           }
-  
+
           li.appendChild(actions);
           userList.appendChild(li);
         }
@@ -229,7 +235,7 @@ document.addEventListener('DOMContentLoaded', () => {
       userList.appendChild(noUsers);
     }
   });
-  
+
   socket.on('friendRequestReceived', ({ from }) => {
     const li = document.createElement('li');
     li.className = 'request-item flex justify-between items-center p-3 border-b border-gray-300';
@@ -248,22 +254,18 @@ document.addEventListener('DOMContentLoaded', () => {
     friendRequestsList.appendChild(li);
     requestsDot.classList.remove('hidden');  // Show notification dot for new friend request
   });
-  
+
   socket.on('friendRequestAccepted', ({ from }) => {
     showToast(`You are now friends with ${from}`, 'success');
     updateUserList();
   });
-  
+
   socket.on('friendListUpdated', updateUserList);
 
   socket.on('messageNotification', ({ from }) => {
     const messageBtn = document.querySelector(`.message-btn[data-friend="${from}"]`);
     if (messageBtn) {
-      messageBtn.classList.add('new-message');
-      messageBtn.parentElement.classList.add('relative');
-      const notificationDot = document.createElement('span');
-      notificationDot.className = 'notification-dot absolute top-0 right-0 w-3 h-3 bg-red-500 rounded-full';
-      messageBtn.parentElement.appendChild(notificationDot);
+      showMessageNotificationDot(messageBtn);
       friendsDot.classList.remove('hidden');  // Show notification dot for new message
     }
   });
@@ -275,35 +277,38 @@ document.addEventListener('DOMContentLoaded', () => {
         if (username !== user.username) {
           const li = document.createElement('li');
           li.className = 'user-item flex justify-between items-center p-3 border-b border-gray-300';
-  
+
           const userInfo = document.createElement('div');
           userInfo.className = 'user-info flex items-center space-x-3';
           userInfo.innerHTML = `
             <span class="username">${username}</span>
             ${status === 'online' ? '<span class="status-dot bg-green-500"></span>' : '<span class="status-dot bg-gray-400"></span>'}
           `;
-  
+
           li.appendChild(userInfo);
-  
+
           const actions = document.createElement('div');
           actions.className = 'actions flex space-x-2';
-  
+
           const messageButton = document.createElement('button');
-          messageButton.className = 'message-btn bg-green-500 text-white px-3 py-1 rounded-lg hover:bg-green-600 transition-colors duration-300';
+          messageButton.className = 'message-btn bg-green-500 text-white px-3 py-1 rounded-lg hover:bg-green-600 transition-colors duration-300 relative';
           messageButton.textContent = 'Message';
           messageButton.setAttribute('data-friend', username);
-          messageButton.addEventListener('click', () => openChatPopup(username));
-  
+          messageButton.addEventListener('click', () => {
+            openChatPopup(username);
+            hideMessageNotificationDot(messageButton);
+          });
+
           const unfriendButton = document.createElement('button');
           unfriendButton.className = 'unfriend-btn bg-red-500 text-white px-3 py-1 rounded-lg hover:bg-red-600 transition-colors duration-300';
           unfriendButton.textContent = 'Unfriend';
           unfriendButton.addEventListener('click', () => {
             socket.emit('unfriend', { from: user.username, to: username });
           });
-  
+
           actions.appendChild(messageButton);
           actions.appendChild(unfriendButton);
-  
+
           li.appendChild(actions);
           userList.appendChild(li);
         }
@@ -378,17 +383,16 @@ function appendMessage(container, { sender, message, timestamp }) {
   container.scrollTop = container.scrollHeight;
 }
 
-function showMessageNotificationDot() {
-  const messagesDot = document.getElementById('messages-dot');
-  if (messagesDot) {
-    messagesDot.classList.remove('hidden');
-  }
+function showMessageNotificationDot(button) {
+  const notificationDot = document.createElement('span');
+  notificationDot.className = 'notification-dot absolute top-0 right-0 w-3 h-3 bg-red-500 rounded-full';
+  button.appendChild(notificationDot);
 }
 
-function hideMessageNotificationDot() {
-  const messagesDot = document.getElementById('messages-dot');
-  if (messagesDot) {
-    messagesDot.classList.add('hidden');
+function hideMessageNotificationDot(button) {
+  const notificationDot = button.querySelector('.notification-dot');
+  if (notificationDot) {
+    notificationDot.remove();
   }
 }
 
