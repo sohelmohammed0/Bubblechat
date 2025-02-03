@@ -1,6 +1,7 @@
 document.addEventListener('DOMContentLoaded', () => {
   const welcomeOverlay = document.getElementById('welcome-overlay');
   const user = JSON.parse(sessionStorage.getItem('user'));
+  const notificationSound = document.getElementById('notification-sound');
 
   if (!user) {
     window.location.href = 'login.html';
@@ -153,6 +154,7 @@ document.addEventListener('DOMContentLoaded', () => {
       if (messageBtn) {
         showMessageNotificationDot(messageBtn);
       }
+      playNotificationSound();
     });
 
     document.body.appendChild(chatPopup);
@@ -268,6 +270,7 @@ document.addEventListener('DOMContentLoaded', () => {
       showMessageNotificationDot(messageBtn);
       friendsDot.classList.remove('hidden');  // Show notification dot for new message
     }
+    playNotificationSound();
   });
 
   function updateUserList() {
@@ -413,3 +416,11 @@ document.querySelector('.tab-btn[data-tab="messages"]').addEventListener('click'
 setTimeout(() => {
   receiveMessage('Hello! This is a new message.');
 }, 5000);
+
+function playNotificationSound() {
+  const notificationSound = document.getElementById('notification-sound');
+  console.log('Playing notification sound'); // Debug log
+  notificationSound.play().catch(error => {
+    console.error('Error playing notification sound:', error);
+  });
+}
